@@ -1,0 +1,30 @@
+{
+	"include": [
+		"./**/*.ts",
+		"src/**/*.ts",
+		"../shared/**.ts",
+		"game/game-state.ts",
+		"game/game-registry.ts",
+		"game/game-socket.ts",
+		"database/database.ts",
+		"auth/auth-cookie.ts",
+		"auth/auth-handler.ts",
+		"rule/rule-registry.ts"
+	],
+	"compilerOptions": {
+		"target": "esnext" /* Set the JavaScript language version for emitted JavaScript and include compatible library declarations. */,
+		"lib": [
+			"ESNext"
+		] /* Specify a set of bundled library declaration files that describe the target runtime environment. */,
+		"module": "nodenext" /* Specify what module code is generated. */,
+		"rootDir": "../" /* Specify the root folder within your source files. */,
+		"types": ["./server.d.ts"],
+		"outDir": "../../dist",
+		"esModuleInterop": true,
+		"forceConsistentCasingInFileNames": true,
+		"strict": true,
+		"skipLibCheck": true,
+		"noEmit": false,
+		"sourceMap": true
+	}
+}

@@ -1,0 +1,28 @@
+{
+	"include": [
+		"./**.ts",
+		"./**.tsx",
+		"page/login-page.css.ts",
+		"page/login-page.tsx",
+		"page/game-page.tsx"
+	],
+	"compilerOptions": {
+		"target": "esnext" /* Set the JavaScript language version for emitted JavaScript and include compatible library declarations. */,
+		"lib": [
+			"DOM",
+			"ESNext.Promise",
+			"ESNext"
+		] /* Specify a set of bundled library declaration files that describe the target runtime environment. */,
+		"types": ["./module.d.ts"],
+		"module": "nodenext" /* Specify what module code is generated. */,
+		"rootDir": "../" /* Specify the root folder within your source files. */,
+		"outDir": "../../dist",
+		"esModuleInterop": true,
+		"forceConsistentCasingInFileNames": true,
+		"strict": true,
+		"skipLibCheck": true,
+		"noEmit": false,
+		"sourceMap": true,
+		"jsx": "react"
+	}
+}
