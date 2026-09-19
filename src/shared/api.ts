@@ -114,6 +114,13 @@ export const clientMessageSchema = z.object({
 			type: z.literal('ban'),
 			userSnowflake: z.string(),
 		}),
+		z.object({
+			type: z.literal('new_game'),
+		}),
+		z.object({
+			type: z.literal('kick'),
+			userSnowflake: z.string(),
+		}),
 	]),
 });
 

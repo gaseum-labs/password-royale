@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 95.99 95.99">
+	<defs>
+		<style>.cls-1{fill:none;stroke:currentColor;stroke-linecap:round;stroke-linejoin:round;stroke-width:8px;}</style>
+	</defs>
+	<g id="Layer_2" data-name="Layer 2">
+		<polyline class="cls-1" points="51.99 51.99 16 87.99 8 79.99 44 44" />
+		<path class="cls-1" d="M64,64,32,32A24,24,0,0,1,56,8L88,40A24,24,0,0,1,64,64Z" />
+		<line class="cls-1" x1="55.99" y1="55.99" x2="79.99" y2="32" />
+		<line class="cls-1" x1="40" y1="40" x2="63.99" y2="16" />
+	</g>
+</svg>

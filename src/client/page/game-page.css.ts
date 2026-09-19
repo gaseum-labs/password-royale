@@ -102,6 +102,14 @@ export const kills = style({
 	opacity: 0.75,
 });
 
+export const iconButton = style({
+	opacity: 0.75,
+	':hover': {
+		opacity: 1,
+	},
+	cursor: 'pointer',
+});
+
 export const resultsList = style({
 	width: '100%',
 	display: 'grid',
@@ -140,6 +148,11 @@ export const userRow = style({
 	gap: '0.5rem',
 	alignItems: 'center',
 	justifyContent: 'start',
+});
+
+export const userRowadmin = style({
+	gridTemplateColumns:
+		'max-content max-content minmax(0, 1fr) max-content max-content',
 });
 
 export const avatar = style({

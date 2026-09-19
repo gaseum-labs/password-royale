@@ -1,7 +1,6 @@
 import { createRuleFactory, createRuleTitle } from '../rule-registry.js';
 import {
 	PARITIES,
-	randElement,
 	isPrime,
 	getMatches,
 	createNumberExpr,
@@ -9,7 +8,6 @@ import {
 
 export const createLengthParityRule = createRuleFactory({
 	title: createRuleTitle`Length must be an ${{ type: PARITIES }} number of characters`,
-	genParameters: () => [randElement(PARITIES)] as const,
 	validator:
 		parity =>
 		({ password }) => {

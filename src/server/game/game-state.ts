@@ -1,4 +1,10 @@
-import { APIGame, Submission, SubmissionFail, User } from '../../shared/api.js';
+import {
+	APIGame,
+	APIPlayer,
+	Submission,
+	SubmissionFail,
+	User,
+} from '../../shared/api.js';
 import { bitScramble, intToGameCode } from '../game-code.js';
 import { removeFromArray, spaceship } from '../util.js';
 import {
@@ -18,7 +24,7 @@ export const GAME_NUM_ROUNDS = 8;
 
 export let numGames: number = Database.getGameCount();
 
-export const createGame = (hostUser: User): InternalGame => {
+export const createGame = (host: UserState): InternalGame => {
 	const code = intToGameCode(bitScramble(numGames));
 	const game: InternalGame = {
 		code,
@@ -39,7 +45,7 @@ export const createGame = (hostUser: User): InternalGame => {
 	Database.incrementGameCount();
 	games.push(game);
 	codeToGame.set(code, game);
-	const hostPlayer = joinGame(game, hostUser);
+	const hostPlayer = joinGame(game, host);
 	game.host = hostPlayer;
 	return game;
 };
@@ -68,11 +74,20 @@ export const getCurrentSubmissions = (game: InternalGame): Submission[] => {
 	return game.roundSubmissions[game.roundNumber];
 };
 
-export const joinGame = (game: InternalGame, user: User): InternalPlayer => {
-	let player = getGamePlayer(game, user.snowflake);
+export const joinGame = (
+	game: InternalGame,
+	userState: UserState,
+): InternalPlayer => {
+	const oldPlayer = userState.player;
+
+	if (oldPlayer != null && oldPlayer.game === game) {
+		leaveGame(oldPlayer);
+	}
+
+	let player = getGamePlayer(game, userState.user.snowflake);
 	if (player == null) {
 		player = {
-			...user,
+			...userState.user,
 			game,
 			isAlive: true,
 			joinTimestamp: Date.now(),
@@ -80,11 +95,10 @@ export const joinGame = (game: InternalGame, user: User): InternalPlayer => {
 			kills: 0,
 		};
 		game.players.push(player);
-	} else {
-		player.isInGame = true;
 	}
 
-	getUserState(user.snowflake).player = player;
+	player.isInGame = true;
+	userState.player = player;
 
 	return player;
 };
@@ -111,12 +125,10 @@ const cleanupGame = (game: InternalGame) => {
 };
 
 export const banUser = (game: InternalGame, userState: UserState) => {
-	const gamesPlayer = game.players.find(
-		player => player.snowflake === userState.user.snowflake,
-	);
-	if (gamesPlayer != null) {
-		removeFromArray(game.players, gamesPlayer);
-		cleanupPlayer(gamesPlayer);
+	const player = userState.player;
+	if (player != null) {
+		removeFromArray(game.players, player);
+		cleanupPlayer(player);
 	}
 
 	userState.player = undefined;
@@ -125,6 +137,15 @@ export const banUser = (game: InternalGame, userState: UserState) => {
 	game.bannedUsers.push(userState.user);
 
 	cleanupGame(game);
+};
+
+export const kickUser = (game: InternalGame, kickUser: UserState): void => {
+	const player = kickUser.player;
+
+	if (player != null) {
+		leaveGame(player);
+		game.players.remove(player);
+	}
 };
 
 export const deleteGame = (game: InternalGame): void => {
@@ -361,6 +382,33 @@ export const moveToReveal = (game: InternalGame) => {
 	}
 };
 
+export const createNewGame = (host: UserState): InternalGame => {
+	const oldPlayer = host.player;
+	const oldGame = oldPlayer?.game;
+
+	const newGame = createGame(host);
+	newGame.bannedUsers = oldGame?.bannedUsers ?? [];
+
+	if (oldGame != null) {
+		for (const player of oldGame.players) {
+			joinGame(newGame, getUserState(player.snowflake));
+		}
+	}
+
+	return newGame;
+};
+
+export const canCreateNewGame = (host: UserState): string | undefined => {
+	const oldPlayer = host.player;
+	const oldGame = oldPlayer?.game;
+
+	if (oldGame == null) return 'You are not in a game already';
+	if (oldGame.host !== oldPlayer) return 'You are not the host';
+	if (oldGame.phase !== 'end') return 'Game is still going';
+
+	return undefined;
+};
+
 export const canSubmit = (
 	userState: UserState,
 ): [InternalGame, InternalPlayer] | [undefined, undefined] => {
@@ -397,7 +445,7 @@ export const canJoinGame = (
 	);
 };
 
-export const canBan = (
+export const canBanOrKick = (
 	userState: UserState,
 	banUserSnowflake: string,
 ): [InternalGame, UserState] | [undefined, undefined] => {

@@ -21,12 +21,15 @@ import {
 	advanceGame,
 	banUser,
 	canAdvance,
-	canBan,
+	canBanOrKick,
+	canCreateNewGame,
 	canJoinGame,
 	canSubmit,
 	createGame,
+	createNewGame,
 	getGame,
 	joinGame,
+	kickUser,
 	leaveGame,
 	receiveSubmission,
 	toAPIGame,
@@ -185,7 +188,7 @@ const joinHandler: MessageHandlerFunc<'join'> = ({
 		};
 	}
 
-	joinGame(game, userState.user);
+	joinGame(game, userState);
 
 	return {
 		updatedGame: game,
@@ -214,7 +217,7 @@ const establishHandler: MessageHandlerFunc<'establish'> = ({ userState }) => {
 		};
 	}
 
-	const game = createGame(userState.user);
+	const game = createGame(userState);
 
 	return { updatedGame: game };
 };
@@ -254,7 +257,7 @@ const banHandler: MessageHandlerFunc<'ban'> = ({
 	payload: { userSnowflake },
 	userState,
 }) => {
-	const [game, banUserState] = canBan(userState, userSnowflake);
+	const [game, banUserState] = canBanOrKick(userState, userSnowflake);
 	if (game == null) {
 		return { errorMessage: "You can't ban this user" };
 	}
@@ -267,6 +270,35 @@ const banHandler: MessageHandlerFunc<'ban'> = ({
 	};
 };
 
+const newGameHandler: MessageHandlerFunc<'new_game'> = ({ userState }) => {
+	const errorMessage = canCreateNewGame(userState);
+	if (errorMessage != null) return { errorMessage };
+
+	const newGame = createNewGame(userState);
+
+	return {
+		updatedGame: newGame,
+	};
+};
+
+const kickHandler: MessageHandlerFunc<'kick'> = ({
+	payload: { userSnowflake },
+	userState,
+}) => {
+	const [game, kickUserState] = canBanOrKick(userState, userSnowflake);
+	if (game == null)
+		return {
+			errorMessage: "You can't kick this user",
+		};
+
+	kickUser(game, kickUserState);
+
+	return {
+		updatedGame: game,
+		updatedUserStates: kickUserState,
+	};
+};
+
 const messageHandlers: {
 	[Type in ClientMessageType]: MessageHandlerFunc<Type>;
 } = {
@@ -276,6 +308,8 @@ const messageHandlers: {
 	submit: submitHandler,
 	advance: advanceHandler,
 	ban: banHandler,
+	new_game: newGameHandler,
+	kick: kickHandler,
 };
 
 const getMessageHandler = <Type>(

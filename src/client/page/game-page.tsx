@@ -8,6 +8,8 @@ import {
 import { useImmer } from 'use-immer';
 import { TopBar } from './top-bar.js';
 import skull from '../assets/skull.svg?raw';
+import boot from '../assets/boot.svg?raw';
+import hammer from '../assets/hammer.svg?raw';
 import { Icon } from '../icon.js';
 import * as style from './game-page.css.js';
 import clsx from 'clsx';
@@ -122,6 +124,12 @@ export const GamePage = ({ game, user }: { game: APIGame; user: User }) => {
 		sendSocketMessage({ type: 'advance' }).catch(storeActions.receiveError);
 	};
 
+	const onClickNewGame = () => {
+		sendSocketMessage({ type: 'new_game' }).catch(
+			storeActions.receiveError,
+		);
+	};
+
 	const onClickSubmit = () => {
 		sendSocketMessage({ type: 'submit', password: state.password }).catch(
 			storeActions.receiveError,
@@ -139,9 +147,27 @@ export const GamePage = ({ game, user }: { game: APIGame; user: User }) => {
 		!hasSubmitted &&
 		state.password.length > 0;
 
+	const canNewGame =
+		game.phase === 'end' && game.hostSnowflake === user.snowflake;
+
 	const winner = game.players.find(
 		player => player.snowflake === game.winnerSnowflake,
 	);
+
+	const canKickOrBan =
+		game.phase === 'pregame' && game.hostSnowflake === user.snowflake;
+
+	const onKickPlayer = (userSnowflake: string) => {
+		sendSocketMessage({ type: 'kick', userSnowflake }).catch(
+			storeActions.receiveError,
+		);
+	};
+
+	const onBanPlayer = (userSnowflake: string) => {
+		sendSocketMessage({ type: 'ban', userSnowflake }).catch(
+			storeActions.receiveError,
+		);
+	};
 
 	const timer = React.useRef<number | undefined>(undefined);
 	useEffect(() => {
@@ -229,11 +255,15 @@ export const GamePage = ({ game, user }: { game: APIGame; user: User }) => {
 					<span className={style.panelHeader}>Passwords</span>
 					<div className={style.resultsList}>
 						{game.submissions.map(submission => {
-							const user = game.players.find(
+							const submissionPlayer = game.players.find(
 								player =>
 									player.snowflake ===
 									submission.userSnowflake,
 							);
+
+							const rowKickBan =
+								canKickOrBan &&
+								submission.userSnowflake !== user.snowflake;
 
 							return (
 								<div
@@ -246,21 +276,51 @@ export const GamePage = ({ game, user }: { game: APIGame; user: User }) => {
 											style.goodSubmission,
 									)}
 								>
-									<div className={style.userRow}>
+									<div
+										className={clsx(
+											style.userRow,
+											rowKickBan && style.userRowadmin,
+										)}
+									>
 										<img
 											className={style.avatar}
 											src={
-												user?.avatarUrl ??
+												submissionPlayer?.avatarUrl ??
 												DEFAULT_AVATAR_PATH
 											}
 										/>
 										<span className={style.username}>
-											{user?.username}
+											{submissionPlayer?.username}
 										</span>
 										<span className={style.kills}>
 											<Icon icon={skull} />{' '}
-											{user?.kills ?? 0}
+											{submissionPlayer?.kills ?? 0}
 										</span>
+
+										{rowKickBan && (
+											<span
+												className={style.iconButton}
+												onClick={() =>
+													onKickPlayer(
+														submission.userSnowflake,
+													)
+												}
+											>
+												<Icon icon={boot} />
+											</span>
+										)}
+										{rowKickBan && (
+											<span
+												className={style.iconButton}
+												onClick={() =>
+													onBanPlayer(
+														submission.userSnowflake,
+													)
+												}
+											>
+												<Icon icon={hammer} />
+											</span>
+										)}
 									</div>
 									{submission.status !== 'pending' && (
 										<Password
@@ -297,18 +357,25 @@ export const GamePage = ({ game, user }: { game: APIGame; user: User }) => {
 				</span>
 				<button
 					disabled={!canSubmit}
-					className={generalStyle.button}
+					className={clsx(
+						generalStyle.button,
+						canSubmit && generalStyle.suggestButton,
+					)}
 					onClick={onClickSubmit}
 				>
 					Submit
 				</button>
 				{game.hostSnowflake === user.snowflake && (
 					<button
-						disabled={!canAdvance}
-						className={generalStyle.button}
+						disabled={!canAdvance && !canNewGame}
+						className={clsx(
+							generalStyle.button,
+							(canAdvance || canNewGame) &&
+								generalStyle.suggestButton,
+						)}
 						onClick={onClickNext}
 					>
-						Next
+						{canNewGame ? 'New Game' : 'Next'}
 					</button>
 				)}
 			</div>

@@ -1,16 +1,5 @@
 {
-	"include": [
-		"./**/*.ts",
-		"src/**/*.ts",
-		"../shared/**.ts",
-		"game/game-state.ts",
-		"game/game-registry.ts",
-		"game/game-socket.ts",
-		"database/database.ts",
-		"auth/auth-cookie.ts",
-		"auth/auth-handler.ts",
-		"rule/rule-registry.ts"
-	],
+	"include": ["./**/*.ts", "../shared/**.ts"],
 	"compilerOptions": {
 		"target": "esnext" /* Set the JavaScript language version for emitted JavaScript and include compatible library declarations. */,
 		"lib": [

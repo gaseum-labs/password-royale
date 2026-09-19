@@ -74,6 +74,16 @@ export const button = style({
 	width: '100%',
 });
 
+export const suggestButton = style({
+	backgroundColor: themeContract.colors.accentText,
+	color: themeContract.colors.background,
+
+	':active': {
+		backgroundColor: themeContract.colors.background,
+		color: themeContract.colors.accentText,
+	},
+});
+
 export const titleText = style({
 	fontFamily: themeContract.titleFontFamily,
 	letterSpacing: 2.0,
