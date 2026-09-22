@@ -1,10 +1,10 @@
 import React from 'react';
 import { TopBar } from './top-bar.js';
-import { User } from '../../shared/api.js';
+import { APIUser } from '../../shared/api.js';
 import { useImmer } from 'use-immer';
 import { EditorState } from '../editor.js';
 
-export const EditorPage = ({ user }: { user: User }) => {
+export const EditorPage = ({ user }: { user: APIUser }) => {
 	const [editorState, setEditorState] = useImmer<EditorState>({
 		allRules: [],
 		placedRules: [],

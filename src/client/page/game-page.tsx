@@ -1,11 +1,17 @@
 import React, { useEffect } from 'react';
 import {
 	APIGame,
-	DEFAULT_AVATAR_PATH,
 	MAX_PASSWORD_LENGTH,
-	User,
+	UNKNOWN_AVATAR_PATH,
+	APIUser,
+	kickMessage,
+	banMessage,
+	submitMessage,
+	newGameMessage,
+	advanceMessage,
+	joinMessage,
 } from '../../shared/api.js';
-import { useImmer } from 'use-immer';
+import { Updater, useImmer } from 'use-immer';
 import { TopBar } from './top-bar.js';
 import skull from '../assets/skull.svg?raw';
 import boot from '../assets/boot.svg?raw';
@@ -15,27 +21,20 @@ import * as style from './game-page.css.js';
 import clsx from 'clsx';
 import * as themeStyle from '../theme.css.js';
 import * as generalStyle from '../util.css.js';
-import { storeActions } from '../store.js';
-import { sendSocketMessage } from '../socket.js';
+import { mainActions } from '../store.js';
+import {
+	registerGameListener,
+	removeGameListener,
+	sendSocketMessage,
+} from '../client-socket.js';
 import startRoundSrc from '../assets/start-round.wav?url';
 import endRoundSrc from '../assets/end-round.wav?url';
 import endGameSrc from '../assets/end-game.wav?url';
 import validSubmissionSrc from '../assets/valid-submission.wav?url';
 import invalidSubmissionSrc from '../assets/invalid-submission.wav?url';
 import { createGameSound } from '../audio.js';
-
-type State = {
-	password: string;
-	timeLeft: number | undefined;
-};
-
-const findPassword = (game: APIGame, userSnowflake: string): string => {
-	return (
-		game.submissions.find(
-			submission => submission.userSnowflake === userSnowflake,
-		)?.password ?? ''
-	);
-};
+import { Link, navigate } from '../nav.js';
+import { getAvatarPath } from '../avatar.js';
 
 export const cleanPassword = (input: string): string => {
 	let str = '';
@@ -57,14 +56,93 @@ const invalidSubmissionSound = createGameSound(
 	invalidSubmissionSrc,
 );
 
-export const GamePage = ({ game, user }: { game: APIGame; user: User }) => {
-	const isHost = game.hostSnowflake === user.snowflake;
+const GAME_NOT_FOUND = Symbol();
+
+type GameState = {
+	game: APIGame | typeof GAME_NOT_FOUND | undefined;
+	password: string;
+};
+
+export const GamePage = ({ user, code }: { user: APIUser; code: string }) => {
+	const [state, setState] = useImmer<GameState>({
+		game: undefined,
+		password: '',
+	});
+
+	React.useEffect(() => {
+		sendSocketMessage(joinMessage, { gameCode: code })
+			.catch(() => {
+				setState(state => {
+					state.game = GAME_NOT_FOUND;
+				});
+			})
+			.then(game => {
+				if (game == null) {
+					return setState(state => {
+						state.game = GAME_NOT_FOUND;
+					});
+				}
+				navigate(`/game/${game.code}`);
+				setState(state => {
+					state.game = game;
+				});
+			});
+	}, []);
+
+	return state.game === GAME_NOT_FOUND ? (
+		<NonExistGame user={user} />
+	) : (
+		<FoundGame
+			game={state.game}
+			password={state.password}
+			setState={setState}
+			user={user}
+		/>
+	);
+};
+
+const FoundGame = ({
+	game,
+	user,
+	password,
+	setState,
+}: {
+	user: APIUser;
+	game: APIGame | undefined;
+	password: string;
+	setState: Updater<GameState>;
+}) => {
+	React.useEffect(() => {
+		const listener = (game: APIGame | null) => {
+			if (game == null) {
+				navigate('/');
+			} else {
+				setState(state => {
+					if (
+						state.game == null ||
+						(typeof state.game === 'object' &&
+							game.roundNumber < state.game?.roundNumber)
+					) {
+						state.password = findUserPassword(game, user.snowflake);
+					}
+					state.game = game;
+				});
+			}
+		};
+		registerGameListener(listener);
+		return () => removeGameListener(listener);
+	}, []);
+
+	const isHost = game?.hostSnowflake === user.snowflake;
 	const canAdvance =
 		isHost && (game.phase === 'pregame' || game.phase === 'reveal');
 
 	const oldGameRef = React.useRef(game);
 	React.useEffect(() => {
 		const oldGame = oldGameRef.current;
+		oldGameRef.current = game;
+		if (oldGame == null || game == null) return;
+
 		if (oldGame.phase !== 'submitting' && game.phase === 'submitting') {
 			startRoundSound.play();
 		} else if (oldGame.phase === 'submitting' && game.phase === 'reveal') {
@@ -90,13 +168,7 @@ export const GamePage = ({ game, user }: { game: APIGame; user: User }) => {
 				invalidSubmissionSound.play();
 			}
 		}
-		oldGameRef.current = game;
 	}, [game]);
-
-	const [state, setState] = useImmer<State>({
-		password: findPassword(game, user.snowflake),
-		timeLeft: undefined,
-	});
 
 	const onChangePassword = (
 		event: React.ChangeEvent<HTMLTextAreaElement>,
@@ -113,91 +185,88 @@ export const GamePage = ({ game, user }: { game: APIGame; user: User }) => {
 		}
 
 		if (event.key == 'Enter' && canSubmit) {
-			sendSocketMessage({
-				type: 'submit',
-				password: state.password,
-			}).catch(storeActions.receiveError);
+			sendSocketMessage(submitMessage, {
+				password,
+			}).catch(mainActions.receiveError);
 		}
 	};
 
 	const onClickNext = () => {
-		sendSocketMessage({ type: 'advance' }).catch(storeActions.receiveError);
+		sendSocketMessage(advanceMessage, {}).catch(mainActions.receiveError);
 	};
 
 	const onClickNewGame = () => {
-		sendSocketMessage({ type: 'new_game' }).catch(
-			storeActions.receiveError,
-		);
+		sendSocketMessage(newGameMessage, {}).catch(mainActions.receiveError);
 	};
 
 	const onClickSubmit = () => {
-		sendSocketMessage({ type: 'submit', password: state.password }).catch(
-			storeActions.receiveError,
+		sendSocketMessage(submitMessage, { password }).catch(
+			mainActions.receiveError,
 		);
 	};
 
-	const playerSubmission = game.submissions.find(
+	const userSubmission = game?.submissions.find(
 		submission => submission.userSnowflake === user.snowflake,
 	);
-
-	const hasSubmitted = playerSubmission?.status !== 'pending';
+	const hasSubmitted =
+		userSubmission != null && userSubmission.status !== 'pending';
 
 	const canSubmit =
+		game != null &&
 		game.phase === 'submitting' &&
 		!hasSubmitted &&
-		state.password.length > 0;
-
+		password.length > 0;
 	const canNewGame =
-		game.phase === 'end' && game.hostSnowflake === user.snowflake;
+		game != null &&
+		game.phase === 'end' &&
+		game.hostSnowflake === user.snowflake;
+	const canKickOrBan =
+		game != null &&
+		game.phase === 'pregame' &&
+		game.hostSnowflake === user.snowflake;
 
-	const winner = game.players.find(
+	const winner = game?.players.find(
 		player => player.snowflake === game.winnerSnowflake,
 	);
 
-	const canKickOrBan =
-		game.phase === 'pregame' && game.hostSnowflake === user.snowflake;
-
 	const onKickPlayer = (userSnowflake: string) => {
-		sendSocketMessage({ type: 'kick', userSnowflake }).catch(
-			storeActions.receiveError,
+		sendSocketMessage(kickMessage, { userSnowflake }).catch(
+			mainActions.receiveError,
 		);
 	};
 
 	const onBanPlayer = (userSnowflake: string) => {
-		sendSocketMessage({ type: 'ban', userSnowflake }).catch(
-			storeActions.receiveError,
+		sendSocketMessage(banMessage, { userSnowflake }).catch(
+			mainActions.receiveError,
 		);
 	};
 
+	const [timeLeft, setTimeLeft] = useImmer<number | undefined>(undefined);
 	const timer = React.useRef<number | undefined>(undefined);
+	const roundEndTime = game?.roundEndTime ?? undefined;
 	useEffect(() => {
 		window.clearInterval(timer.current);
 
-		const roundEndTime = game.roundEndTime;
 		if (roundEndTime == null) {
-			return setState(state => {
-				state.timeLeft = undefined;
-			});
+			return setTimeLeft(undefined);
 		}
 
 		timer.current = window.setInterval(() => {
 			const now = Date.now();
-			setState(state => {
-				state.timeLeft = Math.max(roundEndTime - now, 0);
-			});
+			setTimeLeft(Math.max(roundEndTime - now, 0));
 		}, 100);
-	}, [game.roundEndTime]);
-
-	const timeString =
-		state.timeLeft == null ? undefined : getTimeString(state.timeLeft);
+	}, [roundEndTime]);
+	const timeString = timeLeft == null ? undefined : getTimeString(timeLeft);
 
 	return (
 		<div className={clsx(style.gamePage, themeStyle.darkTheme)}>
-			<TopBar user={user} gameCode={game.code} />
+			<TopBar user={user} gameCode={game?.code} />
 			<div className={style.contentGrid}>
 				<div className={style.gameBar}>
 					<span>
-						{game.phase === 'pregame' ? (
+						{game == null ? (
+							'Loading...'
+						) : game.phase === 'pregame' ? (
 							'Waiting for players'
 						) : game.phase === 'submitting' ? (
 							<>
@@ -228,7 +297,7 @@ export const GamePage = ({ game, user }: { game: APIGame; user: User }) => {
 				<div className={style.panel}>
 					<span className={style.panelHeader}>Rules</span>
 					<div className={style.rulesContainer}>
-						{game.rules.map(rule => (
+						{game?.rules.map(rule => (
 							<div key={rule.uuid} className={style.rule}>
 								<RuleTitle title={rule.title} />
 								{rule.description != null && (
@@ -254,7 +323,7 @@ export const GamePage = ({ game, user }: { game: APIGame; user: User }) => {
 				<div className={style.panel}>
 					<span className={style.panelHeader}>Passwords</span>
 					<div className={style.resultsList}>
-						{game.submissions.map(submission => {
+						{game?.submissions.map(submission => {
 							const submissionPlayer = game.players.find(
 								player =>
 									player.snowflake ===
@@ -285,8 +354,11 @@ export const GamePage = ({ game, user }: { game: APIGame; user: User }) => {
 										<img
 											className={style.avatar}
 											src={
-												submissionPlayer?.avatarUrl ??
-												DEFAULT_AVATAR_PATH
+												submissionPlayer == null
+													? UNKNOWN_AVATAR_PATH
+													: getAvatarPath(
+															submissionPlayer,
+														)
 											}
 										/>
 										<span className={style.username}>
@@ -345,15 +417,16 @@ export const GamePage = ({ game, user }: { game: APIGame; user: User }) => {
 			</div>
 			<div className={style.bottomBar}>
 				<textarea
+					disabled={game == null}
 					className={style.passwordInput}
-					value={state.password}
+					value={password}
 					onChange={onChangePassword}
 					placeholder="Enter password..."
 					onKeyDown={onPressEnter}
 					spellCheck={false}
 				/>
 				<span className={style.passwordLength}>
-					{state.password.length}
+					{password.length ?? 0}
 				</span>
 				<button
 					disabled={!canSubmit}
@@ -365,7 +438,7 @@ export const GamePage = ({ game, user }: { game: APIGame; user: User }) => {
 				>
 					Submit
 				</button>
-				{game.hostSnowflake === user.snowflake && (
+				{game?.hostSnowflake === user.snowflake && (
 					<button
 						disabled={!canAdvance && !canNewGame}
 						className={clsx(
@@ -373,11 +446,29 @@ export const GamePage = ({ game, user }: { game: APIGame; user: User }) => {
 							(canAdvance || canNewGame) &&
 								generalStyle.suggestButton,
 						)}
-						onClick={onClickNext}
+						onClick={canNewGame ? onClickNewGame : onClickNext}
 					>
-						{canNewGame ? 'New Game' : 'Next'}
+						{canNewGame
+							? 'New Game'
+							: game.phase === 'pregame'
+								? 'Start'
+								: 'Next'}
 					</button>
 				)}
+			</div>
+		</div>
+	);
+};
+
+const NonExistGame = ({ user }: { user: APIUser }) => {
+	return (
+		<div className={clsx(style.gamePage, themeStyle.darkTheme)}>
+			<TopBar user={user} gameCode={undefined} />
+			<div className={style.nonExistGrid}>
+				<span>The game you are looking for does not exist</span>
+				<Link to="/" className={style.linkText}>
+					Back to menu
+				</Link>
 			</div>
 		</div>
 	);
@@ -440,4 +531,13 @@ const RuleTitle = ({ title }: { title: string }) => {
 	if (trailing.length > 0) parts.push(trailing);
 
 	return <span className={style.ruleTitle}>{parts}</span>;
+};
+
+const findUserPassword = (game: APIGame, userSnowflake: string): string => {
+	for (const submission of game.submissions) {
+		if (submission.userSnowflake === userSnowflake) {
+			return submission.password;
+		}
+	}
+	return '';
 };

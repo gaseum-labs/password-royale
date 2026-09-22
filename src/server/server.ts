@@ -1,9 +1,7 @@
-import './util.js';
+import '../shared/util.js';
 import express, { ErrorRequestHandler, Router } from 'express';
 import cookieParser from 'cookie-parser';
 import fs from 'node:fs/promises';
-import { Database } from './database/index.js';
-import { MeResult } from '../shared/api.js';
 import { app, httpsServer, httpServer } from './http.js';
 import { COOKIE_NAME, NODE_ENV, PORT } from './variables.js';
 import {
@@ -11,8 +9,8 @@ import {
 	verifyAuthCookieValue,
 } from './auth/auth-cookie.js';
 import { createServer } from 'vite';
-import { authRouter } from './auth/auth-handler.js';
-import { getContentType, getExtension } from './content-type.js';
+import { authRouter } from './auth/auth-router.js';
+import { apiRouter } from './api-router.js';
 
 app.enable('trust-proxy');
 
@@ -59,35 +57,9 @@ app.use((req, res, next) => {
 	next();
 });
 
-const apiRouter = Router();
-
-apiRouter.get('/auth/me', (req, res) => {
-	const { userSnowflake } = req.session;
-	if (userSnowflake == null) {
-		res.json({} satisfies MeResult);
-		return;
-	}
-
-	const user = Database.getUser(userSnowflake);
-	res.json({ user } satisfies MeResult);
-});
-
 app.use('/api', apiRouter);
 
-app.use(authRouter);
-
-app.use('/avatars/*path', async (req, res) => {
-	const filePath = req.params.path;
-	try {
-		const file = await fs.readFile(`db/avatars/${filePath.join('/')}`);
-		const extension = getExtension(filePath);
-
-		res.contentType(getContentType(extension));
-		res.send(file);
-	} catch {
-		res.sendStatus(404);
-	}
-});
+app.use('/auth', authRouter);
 
 if (NODE_ENV === 'development') {
 	const viteApp = await createServer({

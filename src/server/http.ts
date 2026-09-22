@@ -2,7 +2,7 @@ import express from 'express';
 import http from 'http';
 import https from 'https';
 import { WebSocketServer } from 'ws';
-import { onConnection } from './game/game-socket.js';
+import { garbageCollectorLoop, onConnection } from './game/game-socket.js';
 import fs from 'fs/promises';
 import { HTTPS_CERT_FILE_PATH, HTTPS_KEY_FILE_PATH } from './variables.js';
 
@@ -21,3 +21,5 @@ export const httpsWebSocketServer = new WebSocketServer({
 });
 httpWebSocketServer.on('connection', onConnection);
 httpsWebSocketServer.on('connection', onConnection);
+
+setInterval(garbageCollectorLoop, 10000);

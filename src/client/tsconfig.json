@@ -1,11 +1,5 @@
 {
-	"include": [
-		"./**.ts",
-		"./**.tsx",
-		"page/login-page.css.ts",
-		"page/login-page.tsx",
-		"page/game-page.tsx"
-	],
+	"include": ["./**.ts", "./**/*.ts", "./**.tsx", "./**/*.tsx"],
 	"compilerOptions": {
 		"target": "esnext" /* Set the JavaScript language version for emitted JavaScript and include compatible library declarations. */,
 		"lib": [

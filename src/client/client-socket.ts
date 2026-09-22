@@ -1,17 +1,32 @@
 import {
+	APIGame,
 	ClientMessage,
-	ClientMessagePayload,
+	ClientMessageDefinition,
 	serverMessageSchema,
 } from '../shared/api.js';
-import { storeActions } from './store.js';
+
+export type PendingRequest = {
+	resolve: (game: any) => void;
+	reject: (error: Error) => void;
+};
 
 export type Connection = {
 	webSocket: WebSocket;
 	numRequests: number;
-	pendingRequests: Map<number, (error: Error) => void>;
+	pendingRequests: Map<number, PendingRequest>;
 };
 
 let connection: Connection | undefined = undefined;
+
+export type OnGameListener = (game: APIGame | null) => void;
+const onGameListeners: OnGameListener[] = [];
+
+export const registerGameListener = (listener: OnGameListener) => {
+	onGameListeners.push(listener);
+};
+export const removeGameListener = (listener: OnGameListener) => {
+	onGameListeners.remove(listener);
+};
 
 export const openConnection = (): Connection => {
 	if (connection != null && !isClosed(connection.webSocket))
@@ -19,7 +34,7 @@ export const openConnection = (): Connection => {
 
 	const webSocket = new WebSocket('/game-socket');
 
-	const pendingRequests: Map<number, (error: Error) => void> = new Map();
+	const pendingRequests = new Map<number, PendingRequest>();
 
 	webSocket.binaryType = 'arraybuffer';
 
@@ -38,12 +53,19 @@ export const openConnection = (): Connection => {
 		const message = serverMessageSchema.safeParse(json).data;
 		if (message == null) return;
 
-		if ('requestId' in message) {
-			const rejector = pendingRequests.get(message.requestId);
-			if (rejector == null) return;
-			rejector(Error(message.errorMessage));
+		const { resolve, reject } =
+			pendingRequests.get(message.requestId ?? -999) ?? {};
+
+		if (message.type === 'error') {
+			reject?.(Error(message.errorMessage));
+		} else if ('game' in message) {
+			for (const listener of onGameListeners) {
+				listener(message.game);
+			}
+
+			resolve?.(message.game);
 		} else {
-			storeActions.setGame(message.game);
+			resolve?.(message.data);
 		}
 	};
 
@@ -86,9 +108,12 @@ const isClosed = (webSocket: WebSocket): boolean => {
 	return webSocket.readyState === 2 || webSocket.readyState === 3;
 };
 
-export const sendSocketMessage = async (
-	payload: ClientMessagePayload,
-): Promise<void> => {
+type ResultToYield<T> = T extends undefined ? APIGame | null : T;
+
+export const sendSocketMessage = async <Payload, Result>(
+	message: ClientMessageDefinition<Payload, Result>,
+	payload?: Payload | undefined,
+): Promise<ResultToYield<Result>> => {
 	const connection = openConnection();
 
 	if (connection == null) throw Error('No active connection');
@@ -98,16 +123,28 @@ export const sendSocketMessage = async (
 	await waitForSocketReady(webSocket);
 
 	webSocket.send(
-		JSON.stringify({ requestId, payload } satisfies ClientMessage),
+		JSON.stringify({
+			type: message.type,
+			requestId,
+			payload: payload ?? ({} as any),
+		} satisfies ClientMessage),
 	);
 
-	const { promise, reject } = Promise.withResolvers<void>();
+	let isResolved: boolean = false;
+	const { promise, resolve, reject } =
+		Promise.withResolvers<ResultToYield<Result>>();
+
+	setTimeout(() => {
+		if (isResolved) return;
+		reject(Error(`Request ${JSON.stringify(payload)} timed out`));
+	}, 10000);
 
 	promise.finally(() => {
+		isResolved = true;
 		pendingRequests.delete(requestId);
 	});
 
-	pendingRequests.set(requestId, reject);
+	pendingRequests.set(requestId, { resolve, reject });
 
 	return promise;
 };

@@ -1,34 +1,40 @@
 import React from 'react';
 import { useImmer } from 'use-immer';
-import { User } from '../../shared/api.js';
-import { sendSocketMessage } from '../socket.js';
+import {
+	APIUser,
+	establishMessage,
+	fetchGamesMessage,
+	GameHeader,
+	joinMessage,
+} from '../../shared/api.js';
+import { sendSocketMessage } from '../client-socket.js';
 import { TopBar } from './top-bar.js';
 import * as style from './menu-page.css.js';
 import * as generalStyle from '../util.css.js';
 import * as themeStyle from '../theme.css.js';
 import clsx from 'clsx';
-import { storeActions } from '../store.js';
+import { mainActions } from '../store.js';
+import { navigate } from '../nav.js';
 
-type State = { gameCode: string };
+type State = { gameCode: string; isActionLoading: boolean };
 
-export const GameSelector = ({ user }: { user: User }) => {
-	const [state, setState] = useImmer<State>({
+export const MenuPage = ({ user }: { user: APIUser }) => {
+	const [gameHeaders, setGameHeaders] = useImmer<GameHeader[] | undefined>(
+		undefined,
+	);
+
+	const [{ gameCode, isActionLoading }, setState] = useImmer<State>({
 		gameCode: '',
+		isActionLoading: false,
 	});
 
 	React.useEffect(() => {
-		let pathname = window.location.pathname;
-		if (pathname.endsWith('/'))
-			pathname = pathname.slice(0, pathname.length - 1);
-		const path = pathname.slice(1).split('/');
-		if (path.length === 2 && path[0] === 'game') {
-			const gameCode = normalizeGameCode(path[1]);
-			setState(state => {
-				state.gameCode = gameCode;
-			});
-			submitGameCode(gameCode);
-		}
+		sendSocketMessage(fetchGamesMessage)
+			.then(games => setGameHeaders(games))
+			.catch(mainActions.receiveError);
 	}, []);
+
+	const isLoading = isActionLoading || gameHeaders == null;
 
 	const onChangeGameCode = (event: React.ChangeEvent<HTMLInputElement>) => {
 		let { value } = event.currentTarget;
@@ -38,12 +44,44 @@ export const GameSelector = ({ user }: { user: User }) => {
 	};
 
 	const onCreateGame = () => {
-		sendSocketMessage({ type: 'establish' }).catch(
-			storeActions.receiveError,
-		);
+		setState(state => {
+			state.isActionLoading = true;
+		});
+		sendSocketMessage(establishMessage)
+			.then(game => {
+				if (game == null) return;
+				navigate(`/game/${game.code}`);
+			})
+			.catch(mainActions.receiveError)
+			.finally(() =>
+				setState(state => {
+					state.isActionLoading = false;
+				}),
+			);
 	};
 
-	const canSubmitGameCode = state.gameCode.length === 7;
+	const onJoinGame = (gameCode: string) => {
+		setState(state => {
+			state.isActionLoading = true;
+		});
+		sendSocketMessage(joinMessage, { gameCode })
+			.then(game => {
+				if (game == null) return;
+				navigate(`/game/${game.code}`);
+			})
+			.catch(mainActions.receiveError)
+			.finally(() =>
+				setState(state => {
+					state.isActionLoading = false;
+				}),
+			);
+	};
+
+	const onResumeGame = (code: string) => {
+		navigate(`/game/${code}`);
+	};
+
+	const canSubmitGameCode = !isLoading && gameCode.length === 7;
 
 	return (
 		<div className={clsx(style.menuPage, themeStyle.darkTheme)}>
@@ -51,22 +89,55 @@ export const GameSelector = ({ user }: { user: User }) => {
 			<div className={style.menu}>
 				<div className={style.inputRow}>
 					<input
+						disabled={isLoading}
 						className={generalStyle.input}
-						value={state.gameCode}
+						value={gameCode}
 						onChange={onChangeGameCode}
 						placeholder="Enter Game Code"
 					/>
 					<button
 						className={generalStyle.button}
 						disabled={!canSubmitGameCode}
-						onClick={() => submitGameCode(state.gameCode)}
+						onClick={() => onJoinGame(gameCode)}
 					>
 						Join Game
 					</button>
 				</div>
-				<button onClick={onCreateGame} className={generalStyle.button}>
-					Create Game
-				</button>
+				{isLoading ? (
+					<button disabled className={generalStyle.button}>
+						Loading...
+					</button>
+				) : (
+					<button
+						onClick={onCreateGame}
+						className={generalStyle.button}
+					>
+						Create Game
+					</button>
+				)}
+				{gameHeaders?.map(gameHeader => (
+					<button
+						key={gameHeader.code}
+						onClick={() => onResumeGame(gameHeader.code)}
+						className={clsx(
+							generalStyle.button,
+							generalStyle.suggestButton,
+							style.resumeButton,
+						)}
+					>
+						<span className={style.a}>
+							Resume Game {gameHeader.code}
+						</span>
+						<span>
+							Round {gameHeader.roundNumber} /{' '}
+							{gameHeader.numRounds} {gameHeader.phase}
+						</span>
+						<span>
+							{gameHeader.numPlayers} Player
+							{gameHeader.numPlayers === 1 ? '' : 's'}
+						</span>
+					</button>
+				))}
 			</div>
 		</div>
 	);
@@ -77,10 +148,4 @@ const normalizeGameCode = (str: string): string => {
 	str = str.replace(/[^A-Z0-9]/, '');
 	if (str.length > 7) str = str.slice(0, 7);
 	return str;
-};
-
-const submitGameCode = (gameCode: string) => {
-	sendSocketMessage({ type: 'join', gameCode }).catch(
-		storeActions.receiveError,
-	);
 };

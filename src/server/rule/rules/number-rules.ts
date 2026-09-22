@@ -1,4 +1,4 @@
-import { spaceship } from '../../util.js';
+import { spaceship } from '../../../shared/util.js';
 import { SPECIFIC_NUMBER, DUPE_NUMBER, ALL_PRIME } from '../partition.js';
 import { createRuleFactory, createRuleTitle } from '../rule-registry.js';
 import {

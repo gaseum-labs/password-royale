@@ -6,6 +6,8 @@ import {
 	DISCORD_CLIENT_ID,
 	DISCORD_CLIENT_SECRET,
 } from '../variables.js';
+import crypto from 'node:crypto';
+import { newRandomSnowflake } from '../snowflake.js';
 
 const router = Router();
 
@@ -72,9 +74,10 @@ router.get('/login-callback', async (req, res) => {
 	}
 
 	Database.upsertUser({
-		avatarUrl: avatarUrl ?? null,
+		avatarPath: avatarUrl ?? null,
 		snowflake: userResult.id,
 		username: userResult.username,
+		isAdmin: false,
 	});
 
 	req.session.userSnowflake = userResult.id;
@@ -94,11 +97,22 @@ router.get('/logout', (req, res) => {
 	res.redirect('/');
 });
 
+router.get('/spoof', (req, res) => {
+	const { userSnowflake } = req.session;
+	if (userSnowflake == null) return res.sendStatus(401);
+	const user = Database.getUser(userSnowflake);
+	if (!user?.isAdmin) return res.sendStatus(403);
+
+	req.session = { userSnowflake: newRandomSnowflake() };
+	req.isCookieUpdated = true;
+	res.redirect('/');
+});
+
 const getRequestOrigin = (req: Request): string => {
 	return req.protocol + '://' + req.host;
 };
 
 const getLoginRedirectUrl = (req: Request) =>
-	new URL('login-callback', getRequestOrigin(req)).href;
+	new URL('auth/login-callback', getRequestOrigin(req)).href;
 
 export { router as authRouter };

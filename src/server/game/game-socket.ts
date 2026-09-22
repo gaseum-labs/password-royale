@@ -1,323 +1,405 @@
 import {
-	ClientMessage,
-	ClientMessagePayloadOf,
+	advanceMessage,
+	banMessage,
+	ClientMessageDefinition,
 	clientMessageSchema,
-	ClientMessageType,
+	establishMessage,
+	fetchGamesMessage,
+	GameHeader,
+	joinMessage,
+	kickMessage,
+	leaveMessage,
+	MODIFIES_GAME,
+	newGameMessage,
 	ServerMessage,
+	submitMessage,
 } from '../../shared/api.js';
 import {
 	parseCookieHeader,
 	verifyAuthCookieValue,
 } from '../auth/auth-cookie.js';
 import { COOKIE_NAME } from '../variables.js';
-import { WebSocket, WebSocketServer } from 'ws';
+import { WebSocket } from 'ws';
 import {
+	codeToGame,
+	Connection,
+	games,
 	InternalGame,
 	InternalPlayer,
+	InternalUser,
 	userMap,
-	UserState,
 } from './game-registry.js';
 import {
 	advanceGame,
-	banUser,
 	canAdvance,
-	canBanOrKick,
+	canBoot,
 	canCreateNewGame,
 	canJoinGame,
 	canSubmit,
 	createGame,
-	createNewGame,
 	getGame,
+	getGamePlayer,
 	joinGame,
-	kickUser,
 	leaveGame,
 	receiveSubmission,
+	resetGame,
 	toAPIGame,
+	bootPlayer,
+	getAllGameHeaders,
 } from './game-state.js';
 import { Database } from '../database/index.js';
 import crypto from 'node:crypto';
 import { IncomingMessage } from 'node:http';
 
-export const getUserState = (snowflake: string): UserState => {
+export class RequestError extends Error {
+	constructor(message: string) {
+		super(message);
+		this.name = 'RequestError';
+	}
+}
+
+export const getUser = (snowflake: string): InternalUser => {
 	return userMap.getOrSet(snowflake, () => {
-		let user = Database.getUser(snowflake);
-		if (user == null) {
-			user = {
-				avatarUrl: null,
+		let databaseUser = Database.getUser(snowflake);
+		if (databaseUser == null) {
+			databaseUser = {
+				avatarPath: null,
 				snowflake,
 				username: `Rando${crypto.randomInt(1, 50)}`,
+				isAdmin: false,
 			};
-			Database.upsertUser(user);
+			Database.upsertUser(databaseUser);
 		}
 		return {
-			user,
-			webSockets: [],
-			player: undefined,
+			...databaseUser,
+			connections: [],
 		};
 	});
 };
 
-export const cleanupUserState = (userState: UserState) => {
-	if (userState.webSockets.length === 0 && userState.player == null) {
-		userMap.delete(userState.user.snowflake);
+export const cleanupUser = (user: InternalUser) => {
+	if (user.connections.isEmpty()) {
+		userMap.delete(user.snowflake);
 	}
 };
 
-const attachSocket = (userState: UserState, webSocket: WebSocket) => {
-	userState.webSockets.push(webSocket);
+const attachConnection = (user: InternalUser, connection: Connection) => {
+	user.connections.push(connection);
 };
 
-const removeSocket = (userState: UserState, webSocket: WebSocket) => {
-	userState.webSockets.remove(webSocket);
-	cleanupUserState(userState);
+const removeConnection = (user: InternalUser, connection: Connection) => {
+	user.connections.remove(connection);
+	cleanupUser(user);
 };
 
 const sendMessage = (webSocket: WebSocket, message: ServerMessage) => {
 	webSocket.send(JSON.stringify(message));
 };
 
+const dirtyConnections = new Set<Connection>();
+
+const removeConnectionGame = (user: InternalUser, game: InternalGame) => {
+	for (const connection of user.connections) {
+		if (connection.game === game) {
+			connection.game = null;
+			dirtyConnections.add(connection);
+		}
+	}
+};
+
 export const onConnection = (
-	websocket: WebSocket,
+	webSocket: WebSocket,
 	request: IncomingMessage,
 ) => {
 	let isAlive: boolean = true;
 
 	const userSnowflake = verifyUserSnowflake(request.headers.cookie);
 	if (userSnowflake == null) {
-		websocket.close(1008, 'Unauthorized');
+		webSocket.close(1008, 'Unauthorized');
 		return;
 	}
-	const userState = getUserState(userSnowflake);
+	const user = getUser(userSnowflake);
 
-	websocket.on('message', data => {
+	const connection: Connection = {
+		webSocket,
+		game: null,
+		user,
+	};
+	user.connections.push(connection);
+
+	webSocket.on('message', data => {
 		let jsonData: unknown;
 		try {
 			const stringData = data.toString('utf-8');
 			jsonData = JSON.parse(stringData);
 		} catch {
-			return websocket.close(1007);
+			return webSocket.close(1007);
 		}
 
 		const parseResult = clientMessageSchema.safeParse(jsonData);
 		if (!parseResult.success) {
-			return websocket.close(1003);
+			return webSocket.close(1003);
 		}
 
-		const { payload, requestId } = parseResult.data;
+		const { type, payload, requestId } = parseResult.data;
 
-		const handler = getMessageHandler(payload);
+		const [message, handler] = messageHandlers.get(type) ?? [];
 
-		const { errorMessage, updatedUserStates, updatedGame } = handler({
+		const beforeGame = connection.game ?? undefined;
+
+		let errorMessage: string | undefined = undefined;
+		let result: any | undefined = undefined;
+		const params = {
 			payload,
-			userState,
-		});
+			user,
+			connection,
+			isReset: false,
+		};
+		if (handler == null) {
+			errorMessage = `Invalid message type "${type}"`;
+		} else {
+			try {
+				result = handler(params);
+			} catch (error) {
+				errorMessage =
+					error instanceof Error ? error.message : String(error);
+			}
+		}
+
+		const afterGame = connection.game ?? undefined;
 
 		if (errorMessage != null) {
-			sendMessage(websocket, {
+			sendMessage(webSocket, {
+				type: 'error',
 				requestId,
 				errorMessage,
 			});
+		} else {
+			if (message?.resultSchema === MODIFIES_GAME) {
+				notifyGame({
+					request: { user, requestId },
+					games: [beforeGame, afterGame],
+					dirtyConnections: [...dirtyConnections],
+					isReset: params.isReset,
+				});
+			} else {
+				sendMessage(connection.webSocket, {
+					type: 'data',
+					requestId,
+					data: result,
+				});
+			}
 		}
 
-		notifyGame(updatedGame, updatedUserStates);
+		dirtyConnections.clear();
 	});
 
-	websocket.on('pong', () => {
+	webSocket.on('pong', () => {
 		isAlive = true;
 	});
 
 	const interval = setInterval(() => {
 		if (!isAlive) {
-			return void websocket.terminate();
+			return void webSocket.terminate();
 		}
 		isAlive = false;
-		websocket.ping();
+		webSocket.ping();
 	}, 30000);
 
-	websocket.on('close', () => {
+	webSocket.on('close', () => {
 		clearInterval(interval);
-		removeSocket(userState, websocket);
+		removeConnection(user, connection);
 	});
 
-	const player = userState.player;
-	sendMessage(websocket, {
-		game: player != null ? toAPIGame(player) : null,
-	});
-
-	attachSocket(userState, websocket);
+	attachConnection(user, connection);
 };
 
-export const notifyGame = (
-	game: InternalGame | undefined,
-	userStates?: (UserState | undefined)[] | undefined | UserState,
-) => {
-	for (const { player, webSocket } of getSockets(
-		game,
-		Array.isArray(userStates) ? userStates : [userStates],
-	)) {
-		sendMessage(webSocket, {
-			game: player == null ? null : toAPIGame(player),
+export const notifyGame = ({
+	request,
+	games,
+	dirtyConnections,
+	isReset,
+}: {
+	request?:
+		| {
+				requestId: number;
+				user: InternalUser;
+		  }
+		| undefined;
+	games?: (InternalGame | undefined)[] | undefined;
+	dirtyConnections?: Connection[];
+	isReset: boolean;
+}) => {
+	const connections = new Set<Connection>();
+
+	for (const connection of dirtyConnections ?? []) {
+		connections.add(connection);
+	}
+
+	const gameSet = new Set(games?.filter(game => game != null) ?? []);
+	for (const game of gameSet) {
+		if (game == null) continue;
+		for (const player of game.players) {
+			const user = getUser(player.user.snowflake);
+			for (const connection of user.connections) {
+				if (connection.game === game) {
+					connections.add(connection);
+				}
+			}
+		}
+	}
+
+	for (const sendConnection of connections) {
+		sendMessage(sendConnection.webSocket, {
+			type: 'game',
+			requestId:
+				sendConnection.user === request?.user
+					? request.requestId
+					: undefined,
+			game:
+				sendConnection.game == null
+					? null
+					: toAPIGame(
+							sendConnection.game,
+							sendConnection.user,
+							isReset,
+						),
 		});
 	}
 };
 
-type MessageHandlerResult = {
-	errorMessage?: string | undefined;
-	updatedGame?: InternalGame | undefined;
-	updatedUserStates?: (UserState | undefined)[] | undefined | UserState;
+const getContext = (
+	user: InternalUser,
+	connection: Connection,
+): { game: InternalGame; player: InternalPlayer } => {
+	const { game } = connection;
+	if (game == null) throw new RequestError('You are not in a game');
+
+	const player = getGamePlayer(game, user.snowflake);
+	if (player == null) throw new RequestError('You are not in this game');
+
+	return { game, player };
 };
 
-type MessageHandlerFunc<Type> = (options: {
-	payload: (ClientMessage & { payload: { type: Type } })['payload'];
-	userState: UserState;
-}) => MessageHandlerResult;
+type MessageHandlerFunc<Payload, Result> = (options: {
+	payload: Payload;
+	user: InternalUser;
+	connection: Connection;
+	isReset: boolean;
+}) => Result;
 
-const joinHandler: MessageHandlerFunc<'join'> = ({
-	payload: { gameCode },
-	userState,
-}) => {
-	const game = getGame(gameCode);
-	if (game == null) {
-		return {
-			errorMessage: 'That game does not exist',
-		};
-	}
-	if (!canJoinGame(userState, game)) {
-		return {
-			errorMessage: "You can't join this game right now",
-		};
-	}
+const messageHandlers = new Map<
+	string,
+	[ClientMessageDefinition<any, any>, MessageHandlerFunc<any, any>]
+>();
 
-	joinGame(game, userState);
-
-	return {
-		updatedGame: game,
-	};
+const registerMessageHandlerFunc = <Payload, Result>(
+	message: ClientMessageDefinition<Payload, Result>,
+	handler: MessageHandlerFunc<Payload, Result>,
+): MessageHandlerFunc<Payload, Result> => {
+	messageHandlers.set(message.type, [message, handler]);
+	return handler;
 };
 
-const leaveHandler: MessageHandlerFunc<'leave'> = ({ userState }) => {
-	const player = userState.player;
-	if (player == null) return { errorMessage: 'You are not in a game' };
+registerMessageHandlerFunc(
+	joinMessage,
+	({ payload: { gameCode }, user, connection }) => {
+		const game = getGame(gameCode);
+		if (game == null) {
+			throw new RequestError('That game does not exist');
+		}
+		canJoinGame(game, user);
 
-	const { game } = player;
+		joinGame(game, user);
+
+		connection.game = game;
+	},
+);
+
+registerMessageHandlerFunc(leaveMessage, ({ user, connection }) => {
+	const { player } = getContext(user, connection);
 
 	leaveGame(player);
+});
 
-	return {
-		updatedGame: game,
-		updatedUserStates: userState,
-	};
-};
+registerMessageHandlerFunc(establishMessage, ({ user, connection }) => {
+	const game = createGame(user);
 
-const establishHandler: MessageHandlerFunc<'establish'> = ({ userState }) => {
-	const player = userState.player;
-	if (player != null) {
-		return {
-			errorMessage: 'You are already in a game',
-		};
-	}
+	connection.game = game;
+});
 
-	const game = createGame(userState);
+registerMessageHandlerFunc(
+	submitMessage,
+	({ payload: { password }, user, connection }) => {
+		const { game, player } = getContext(user, connection);
 
-	return { updatedGame: game };
-};
+		canSubmit(game, player);
 
-const submitHandler: MessageHandlerFunc<'submit'> = ({
-	payload: { password },
-	userState,
-}) => {
-	const [game, player] = canSubmit(userState);
-	if (game == null) {
-		return {
-			errorMessage: "You can't submit now",
-		};
-	}
+		receiveSubmission(game, player, password);
+	},
+);
 
-	receiveSubmission(game, player, password);
+registerMessageHandlerFunc(advanceMessage, ({ user, connection }) => {
+	const { game, player } = getContext(user, connection);
 
-	return {
-		updatedGame: game,
-	};
-};
-
-const advanceHandler: MessageHandlerFunc<'advance'> = ({ userState }) => {
-	const game = canAdvance(userState);
-	if (game == null) {
-		return { errorMessage: 'You cannot advance now' };
-	}
+	canAdvance(game, player);
 
 	advanceGame(game);
+});
 
-	return {
-		updatedGame: game,
-	};
-};
+registerMessageHandlerFunc(
+	banMessage,
+	({ payload: { userSnowflake }, user, connection }) => {
+		const { game, player } = getContext(user, connection);
 
-const banHandler: MessageHandlerFunc<'ban'> = ({
-	payload: { userSnowflake },
-	userState,
-}) => {
-	const [game, banUserState] = canBanOrKick(userState, userSnowflake);
-	if (game == null) {
-		return { errorMessage: "You can't ban this user" };
-	}
+		canBoot(game, player);
 
-	banUser(game, banUserState);
+		const bannedPlayer = getGamePlayer(
+			game,
+			getUser(userSnowflake).snowflake,
+		);
+		if (bannedPlayer == null)
+			throw new RequestError('That player is not in the game');
 
-	return {
-		updatedGame: game,
-		updatedUserStates: banUserState,
-	};
-};
+		bootPlayer(game, bannedPlayer, true);
 
-const newGameHandler: MessageHandlerFunc<'new_game'> = ({ userState }) => {
-	const errorMessage = canCreateNewGame(userState);
-	if (errorMessage != null) return { errorMessage };
+		removeConnectionGame(bannedPlayer.user, game);
+	},
+);
 
-	const newGame = createNewGame(userState);
+registerMessageHandlerFunc(
+	kickMessage,
+	({ payload: { userSnowflake }, user, connection }) => {
+		const { game, player } = getContext(user, connection);
 
-	return {
-		updatedGame: newGame,
-	};
-};
+		canBoot(game, player);
 
-const kickHandler: MessageHandlerFunc<'kick'> = ({
-	payload: { userSnowflake },
-	userState,
-}) => {
-	const [game, kickUserState] = canBanOrKick(userState, userSnowflake);
-	if (game == null)
-		return {
-			errorMessage: "You can't kick this user",
-		};
+		const kickedPlayer = getGamePlayer(
+			game,
+			getUser(userSnowflake).snowflake,
+		);
+		if (kickedPlayer == null)
+			throw new RequestError('That player is not in the game');
 
-	kickUser(game, kickUserState);
+		bootPlayer(game, kickedPlayer, false);
 
-	return {
-		updatedGame: game,
-		updatedUserStates: kickUserState,
-	};
-};
+		removeConnectionGame(kickedPlayer.user, game);
+	},
+);
 
-const messageHandlers: {
-	[Type in ClientMessageType]: MessageHandlerFunc<Type>;
-} = {
-	join: joinHandler,
-	leave: leaveHandler,
-	establish: establishHandler,
-	submit: submitHandler,
-	advance: advanceHandler,
-	ban: banHandler,
-	new_game: newGameHandler,
-	kick: kickHandler,
-};
+registerMessageHandlerFunc(newGameMessage, params => {
+	const { game, player } = getContext(params.user, params.connection);
 
-const getMessageHandler = <Type>(
-	payload: ClientMessagePayloadOf<Type>,
-): MessageHandlerFunc<Type> => {
-	payload.type;
-	return messageHandlers[payload.type] as any;
-};
+	canCreateNewGame(game, params.user);
+
+	resetGame(game);
+
+	params.isReset = true;
+});
+
+registerMessageHandlerFunc(fetchGamesMessage, ({ user }): GameHeader[] => {
+	return getAllGameHeaders(user);
+});
 
 const verifyUserSnowflake = (
 	cookieHeader: string | undefined,
@@ -331,21 +413,22 @@ const verifyUserSnowflake = (
 	return session.userSnowflake;
 };
 
-function* getSockets(
-	game: InternalGame | undefined,
-	userStates: (UserState | undefined)[] | undefined,
-): Generator<{ webSocket: WebSocket; player: InternalPlayer | undefined }> {
-	const userStateSet = new Set([
-		...(game?.players
-			?.filter(player => player.isInGame)
-			?.map(player => getUserState(player.snowflake)) ?? []),
-		...(userStates?.filter(userState => userState != null) ?? []),
-	]);
-
-	for (const userState of userStateSet) {
-		for (const webSocket of userState.webSockets) {
-			const player = userState.player;
-			yield { webSocket, player };
+export const garbageCollectorLoop = () => {
+	for (let i = 0; i < games.length; ++i) {
+		const game = games[i];
+		let isGood = false;
+		superLoop: for (const player of game.players) {
+			for (const connection of player.user.connections) {
+				if (connection.game === game) {
+					isGood = true;
+					break superLoop;
+				}
+			}
+		}
+		if (!isGood) {
+			games.splice(i, 1);
+			--i;
+			codeToGame.delete(game.code);
 		}
 	}
-}
+};

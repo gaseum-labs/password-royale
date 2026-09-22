@@ -1,22 +1,28 @@
 import z from 'zod';
 
-export const DEFAULT_AVATAR_PATH = '/default-avatar.webp';
+export const UNKNOWN_AVATAR_PATH = '/unkown-avatar.webp';
 export const MAX_PASSWORD_LENGTH = 255;
 
-export type MeResult = { user?: User | undefined };
+export type MeResult = { user?: APIUser | undefined };
 
-export type User = {
+export type APIUser = {
 	snowflake: string;
 	username: string;
-	avatarUrl: string | null;
+	isAdmin: boolean;
 };
 
-export type APIPlayer = User & {
+export type APIPlayer = APIUser & {
 	isAlive: boolean;
 	kills: number;
 };
 
-export type Phase = 'pregame' | 'submitting' | 'reveal' | 'end';
+export const phaseSchema = z.union([
+	z.literal('pregame'),
+	z.literal('submitting'),
+	z.literal('reveal'),
+	z.literal('end'),
+]);
+export type Phase = z.infer<typeof phaseSchema>;
 
 export type APIRule = {
 	uuid: string;
@@ -38,9 +44,20 @@ export type APIGame = {
 	hostSnowflake: string;
 	submissions: Submission[];
 	numRounds: number;
-	bannedUsers: User[];
 	timestamp: number;
+	isReset?: boolean | undefined;
 };
+
+export const gameHeaderSchema = z.object({
+	code: z.string(),
+	numPlayers: z.number(),
+	phase: phaseSchema,
+	roundNumber: z.number(),
+	numRounds: z.number(),
+	timestamp: z.number(),
+});
+
+export type GameHeader = z.infer<typeof gameHeaderSchema>;
 
 export type FailReason = 'dupe' | 'rule' | 'late';
 
@@ -64,22 +81,36 @@ export type Submission = {
 };
 
 export const serverResponseMessageSchema = z.object({
+	type: z.literal('error'),
 	requestId: z.number(),
 	errorMessage: z.string(),
 });
 
 export const serverGameMessageSchema = z.object({
+	type: z.literal('game'),
+	requestId: z.number().optional(),
 	game: z.custom<APIGame>().nullable(),
 });
 
-export const serverMessageSchema = z.union([
+export const serverDataMessageSchema = z.object({
+	type: z.literal('data'),
+	requestId: z.number().optional(),
+	data: z.any(),
+});
+
+export const serverMessageSchema = z.discriminatedUnion('type', [
 	serverResponseMessageSchema,
 	serverGameMessageSchema,
+	serverDataMessageSchema,
 ]);
 
 export type ServerResponseMessage = z.infer<typeof serverResponseMessageSchema>;
 export type ServerGameMessage = z.infer<typeof serverGameMessageSchema>;
-export type ServerMessage = ServerResponseMessage | ServerGameMessage;
+export type ServerDataMessage = z.infer<typeof serverDataMessageSchema>;
+export type ServerMessage =
+	| ServerResponseMessage
+	| ServerGameMessage
+	| ServerDataMessage;
 
 export const passwordSchema = z
 	.string()
@@ -90,43 +121,97 @@ export const passwordSchema = z
 			/^[ !"#$%&'()*+,\-./0-9:;<=>?@A-Z[\\\]^_`a-z{|}~]+$/.test(password),
 	);
 
+export const MODIFIES_GAME = Symbol();
+
+export type ClientMessageDefinition<Payload, Result> = {
+	type: string;
+	payloadSchema: z.ZodType<Payload>;
+	resultSchema: typeof MODIFIES_GAME | z.ZodType<Result>;
+};
+
+const ClientMessageDefinitions: ClientMessageDefinition<any, any>[] = [];
+
+const registerClientMessageDefinition = <Payload, Result>(definition: {
+	type: string;
+	payloadSchema: z.ZodType<Payload>;
+	resultSchema: Result;
+}): Result extends typeof MODIFIES_GAME
+	? ClientMessageDefinition<Payload, undefined>
+	: ClientMessageDefinition<Payload, z.infer<Result>> => {
+	ClientMessageDefinitions.push(definition as any);
+	return definition as any;
+};
+
+export const fetchGamesMessage = registerClientMessageDefinition({
+	type: 'fetch_games',
+	payloadSchema: z.object({}),
+	resultSchema: z.array(gameHeaderSchema),
+} as const);
+
+export const establishMessage = registerClientMessageDefinition({
+	type: 'establish',
+	payloadSchema: z.object({}),
+	resultSchema: MODIFIES_GAME,
+} as const);
+
+export const joinMessage = registerClientMessageDefinition({
+	type: 'join',
+	payloadSchema: z.object({ gameCode: z.string() }),
+	resultSchema: MODIFIES_GAME,
+} as const);
+
+export const leaveMessage = registerClientMessageDefinition({
+	type: 'leave',
+	payloadSchema: z.object({}),
+	resultSchema: MODIFIES_GAME,
+} as const);
+
+export const submitMessage = registerClientMessageDefinition({
+	type: 'submit',
+	payloadSchema: z.object({ password: passwordSchema }),
+	resultSchema: MODIFIES_GAME,
+} as const);
+
+export const advanceMessage = registerClientMessageDefinition({
+	type: 'advance',
+	payloadSchema: z.object({}),
+	resultSchema: MODIFIES_GAME,
+} as const);
+
+export const banMessage = registerClientMessageDefinition({
+	type: 'ban',
+	payloadSchema: z.object({ userSnowflake: z.string() }),
+	resultSchema: MODIFIES_GAME,
+} as const);
+
+export const kickMessage = registerClientMessageDefinition({
+	type: 'kick',
+	payloadSchema: z.object({ userSnowflake: z.string() }),
+	resultSchema: MODIFIES_GAME,
+} as const);
+
+export const newGameMessage = registerClientMessageDefinition({
+	type: 'new_game',
+	payloadSchema: z.object({}),
+	resultSchema: MODIFIES_GAME,
+} as const);
+
+export type ClientMessageResults = {
+	establish: APIGame | null;
+	join: APIGame | null;
+	leave: APIGame | null;
+	submit: APIGame | null;
+	advance: APIGame | null;
+	ban: APIGame | null;
+	new_game: APIGame | null;
+	kick: APIGame | null;
+	fetch_games: GameHeader[];
+};
+
 export const clientMessageSchema = z.object({
 	requestId: z.number(),
-	payload: z.discriminatedUnion('type', [
-		z.object({
-			type: z.literal('establish'),
-		}),
-		z.object({
-			type: z.literal('join'),
-			gameCode: z.string(),
-		}),
-		z.object({
-			type: z.literal('leave'),
-		}),
-		z.object({
-			type: z.literal('submit'),
-			password: passwordSchema,
-		}),
-		z.object({
-			type: z.literal('advance'),
-		}),
-		z.object({
-			type: z.literal('ban'),
-			userSnowflake: z.string(),
-		}),
-		z.object({
-			type: z.literal('new_game'),
-		}),
-		z.object({
-			type: z.literal('kick'),
-			userSnowflake: z.string(),
-		}),
-	]),
+	type: z.string(),
+	payload: z.record(z.string(), z.unknown()),
 });
 
 export type ClientMessage = z.infer<typeof clientMessageSchema>;
-export type ClientMessagePayload = ClientMessage['payload'];
-export type ClientMessagePayloadOf<Type> = ClientMessage['payload'] & {
-	type: Type;
-};
-export type ClientMessageType = ClientMessage['payload']['type'];

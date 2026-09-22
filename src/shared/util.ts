@@ -31,3 +31,7 @@ Map.prototype.getOrSet = function <K, V>(key: K, orSet: (() => V) | V): V {
 export const spaceship = (a: number, b: number): number => {
 	return a < b ? -1 : a > b ? 1 : 0;
 };
+
+export const coerceArray = <T>(a: T[] | T): T[] => {
+	return Array.isArray(a) ? a : [a];
+};

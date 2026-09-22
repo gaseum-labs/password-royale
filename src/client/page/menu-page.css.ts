@@ -28,3 +28,17 @@ export const inputRow = style({
 	gridTemplateRows: '100%',
 	gap: '1.0rem',
 });
+
+export const resumeButton = style({
+	display: 'grid',
+	gridTemplateRows: 'max-content max-content',
+	gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)',
+	justifyItems: 'center',
+	alignContent: 'center',
+	gridTemplateAreas: `"a a"
+	"b c"`,
+});
+
+export const a = style({
+	gridArea: 'a',
+});

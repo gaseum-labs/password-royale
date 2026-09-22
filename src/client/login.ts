@@ -1,6 +1,6 @@
 import { MeResult } from '../shared/api.js';
-import { openConnection } from './socket.js';
-import { storeActions } from './store.js';
+import { openConnection } from './client-socket.js';
+import { mainActions } from './store.js';
 
 export const tryGetMe = async () => {
 	try {
@@ -9,9 +9,10 @@ export const tryGetMe = async () => {
 		});
 		const MeResult = (await meResponse.json()) as MeResult;
 
-		storeActions.receiveMe(MeResult.user);
+		mainActions.receiveMe(MeResult.user);
 		openConnection();
-	} catch {
-		storeActions.receiveMe(undefined);
+	} catch (error) {
+		console.error(error);
+		mainActions.receiveMe(undefined);
 	}
 };

@@ -1,26 +1,28 @@
 import React from 'react';
-import { DEFAULT_AVATAR_PATH, User } from '../../shared/api.js';
+import { APIUser, leaveMessage } from '../../shared/api.js';
 import * as style from './top-bar.css.js';
-import { sendSocketMessage } from '../socket.js';
-import { storeActions, useStore } from '../store.js';
+import { sendSocketMessage } from '../client-socket.js';
+import { mainActions, useMainStore } from '../store.js';
 import clsx from 'clsx';
+import { getAvatarPath } from '../avatar.js';
+import { navigate } from '../nav.js';
 
 export type TopBarProps = {
-	user: User;
+	user: APIUser;
 	gameCode?: string | undefined;
 	className?: string;
 };
 
 export const TopBar = ({ user, gameCode, className }: TopBarProps) => {
-	const errorMessage = useStore(state => state.errorMessage);
+	const errorMessage = useMainStore(state => state.errorMessage);
 
 	const onLeave = () => {
-		window.history.pushState({}, '', '/');
-		sendSocketMessage({ type: 'leave' }).catch(storeActions.receiveError);
+		navigate('/');
+		sendSocketMessage(leaveMessage).catch(mainActions.receiveError);
 	};
 
 	const onDismissError = () => {
-		storeActions.clearError();
+		mainActions.clearError();
 	};
 
 	const onClickGameCode = () => {
@@ -53,13 +55,10 @@ export const TopBar = ({ user, gameCode, className }: TopBarProps) => {
 						Leave
 					</span>
 				)}
-				<a href="/logout" className={style.textButton}>
+				<a href="/auth/logout" className={style.textButton}>
 					Log out
 				</a>
-				<img
-					src={user.avatarUrl ?? DEFAULT_AVATAR_PATH}
-					className={style.avatar}
-				/>
+				<img src={getAvatarPath(user)} className={style.avatar} />
 			</div>
 			{errorMessage != null && (
 				<div className={style.errorBanner}>

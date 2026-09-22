@@ -21,6 +21,21 @@ export const contentGrid = style({
 	"rules passwords"`,
 });
 
+export const nonExistGrid = style({
+	display: 'grid',
+	gridTemplateRows: 'max-content max-content',
+	gridTemplateColumns: '100%',
+	gap: '0.5rem',
+	padding: '0.5rem',
+	justifyItems: 'center',
+	alignContent: 'center',
+	color: themeContract.colors.text,
+});
+
+export const linkText = style({
+	color: themeContract.colors.accentText,
+});
+
 export const gameBar = style({
 	gridArea: 'game-bar',
 	fontSize: '1.0rem',

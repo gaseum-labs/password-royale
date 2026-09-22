@@ -79,7 +79,7 @@ export const createUsernameRule = createRuleFactory({
 	validator:
 		() =>
 		({ password, player }) => {
-			const username = player.username;
+			const username = player.user.username;
 			if (!password.toLowerCase().includes(username.toLowerCase())) {
 				return `Password does not include "${username}"`;
 			}
