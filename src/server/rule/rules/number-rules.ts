@@ -95,11 +95,12 @@ export const createDupeNumberRule = createRuleFactory({
 	validator:
 		requiredCount =>
 		({ password }) => {
-			const numberToCount = new Map<string, number>();
-			for (const number of getMatches(createWordExpr(), password)) {
-				const count = numberToCount.get(number) ?? 0;
+			const numberToCount = new Map<number, number>();
+			for (const numberStr of getMatches(createNumberExpr(), password)) {
+				const numberValue = Number(numberStr);
+				const count = numberToCount.get(numberValue) ?? 0;
 				if (count + 1 >= requiredCount) return undefined;
-				numberToCount.set(number, count + 1);
+				numberToCount.set(numberValue, count + 1);
 			}
 			return `Does not have at least ${requiredCount} of the same number`;
 		},

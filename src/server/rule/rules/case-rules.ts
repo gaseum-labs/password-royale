@@ -84,10 +84,10 @@ export const createAllSideCasedRule = createRuleFactory({
 		(side, letterCase) =>
 		({ password }) => {
 			const startExpr = new RegExp(
-				`^[${toCase('a-z', letterCase)}][a-zA-Z]+$`,
+				`^[${toCase('a-z', letterCase)}][a-zA-Z]*$`,
 			);
 			const endExpr = new RegExp(
-				`^[a-zA-Z]+[${toCase('a-z', letterCase)}]$`,
+				`^[a-zA-Z]*[${toCase('a-z', letterCase)}]$`,
 			);
 			const expr = side === 'first' ? startExpr : endExpr;
 
