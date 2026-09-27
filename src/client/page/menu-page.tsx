@@ -115,6 +115,12 @@ export const MenuPage = ({ user }: { user: APIUser }) => {
 						Create Game
 					</button>
 				)}
+				<button
+					className={generalStyle.button}
+					onClick={() => navigate('/editor')}
+				>
+					My Rules
+				</button>
 				{gameHeaders?.map(gameHeader => (
 					<button
 						key={gameHeader.code}

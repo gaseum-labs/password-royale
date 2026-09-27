@@ -1,3 +1,5 @@
+import z from 'zod';
+
 export const removeFromArray = <T>(array: T[], element: T): void => {};
 
 declare global {
@@ -35,3 +37,21 @@ export const spaceship = (a: number, b: number): number => {
 export const coerceArray = <T>(a: T[] | T): T[] => {
 	return Array.isArray(a) ? a : [a];
 };
+
+export const asciiStringSchema = () =>
+	z.string().refine(string => {
+		for (let i = 0; i < string.length; ++i) {
+			const code = string.charCodeAt(i);
+			if (code < 32 || code > 126) return false;
+		}
+		return true;
+	});
+
+export const asciiStringWithNewlineSchema = () =>
+	z.string().refine(string => {
+		for (let i = 0; i < string.length; ++i) {
+			const code = string.charCodeAt(i);
+			if (code !== 10 && (code < 32 || code > 126)) return false;
+		}
+		return true;
+	});

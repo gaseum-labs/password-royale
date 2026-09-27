@@ -50,13 +50,7 @@ import {
 import { Database } from '../database/index.js';
 import crypto from 'node:crypto';
 import { IncomingMessage } from 'node:http';
-
-export class RequestError extends Error {
-	constructor(message: string) {
-		super(message);
-		this.name = 'RequestError';
-	}
-}
+import { RequestError } from '../error.js';
 
 export const getUser = (snowflake: string): InternalUser => {
 	return userMap.getOrSet(snowflake, () => {

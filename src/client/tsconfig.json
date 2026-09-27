@@ -1,5 +1,11 @@
 {
-	"include": ["./**.ts", "./**/*.ts", "./**.tsx", "./**/*.tsx"],
+	"include": [
+		"./**.ts",
+		"./**/*.ts",
+		"./**.tsx",
+		"./**/*.tsx",
+		"../shared/asset-path.ts"
+	],
 	"compilerOptions": {
 		"target": "esnext" /* Set the JavaScript language version for emitted JavaScript and include compatible library declarations. */,
 		"lib": [

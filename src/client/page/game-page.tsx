@@ -34,15 +34,10 @@ import validSubmissionSrc from '../assets/valid-submission.wav?url';
 import invalidSubmissionSrc from '../assets/invalid-submission.wav?url';
 import { createGameSound } from '../audio.js';
 import { Link, navigate } from '../nav.js';
-import { getAvatarPath } from '../avatar.js';
+import { getAvatarPath } from '../../shared/asset-path.js';
 
 export const cleanPassword = (input: string): string => {
-	let str = '';
-	for (let i = 0; i < input.length && i < MAX_PASSWORD_LENGTH; ++i) {
-		const code = input.charCodeAt(i);
-		if (code >= 32 && code <= 126) str += input[i];
-	}
-	return str;
+	return input.replace(/[^ -~]/g, '');
 };
 
 const audioContext = new AudioContext();
@@ -357,7 +352,7 @@ const FoundGame = ({
 												submissionPlayer == null
 													? UNKNOWN_AVATAR_PATH
 													: getAvatarPath(
-															submissionPlayer,
+															submissionPlayer.snowflake,
 														)
 											}
 										/>

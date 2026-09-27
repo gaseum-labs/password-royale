@@ -1,15 +1,19 @@
 import z from 'zod';
+import { asciiStringSchema, asciiStringWithNewlineSchema } from './util.js';
+import { normalizeOptionsCode } from './options.js';
 
 export const UNKNOWN_AVATAR_PATH = '/unkown-avatar.webp';
 export const MAX_PASSWORD_LENGTH = 255;
 
 export type MeResult = { user?: APIUser | undefined };
 
-export type APIUser = {
-	snowflake: string;
-	username: string;
-	isAdmin: boolean;
-};
+export const apiUserSchema = z.object({
+	snowflake: z.string(),
+	username: z.string(),
+	isAdmin: z.boolean(),
+});
+
+export type APIUser = z.infer<typeof apiUserSchema>;
 
 export type APIPlayer = APIUser & {
 	isAlive: boolean;
@@ -112,14 +116,9 @@ export type ServerMessage =
 	| ServerGameMessage
 	| ServerDataMessage;
 
-export const passwordSchema = z
-	.string()
-	.refine(
-		password =>
-			password.length > 0 &&
-			password.length <= MAX_PASSWORD_LENGTH &&
-			/^[ !"#$%&'()*+,\-./0-9:;<=>?@A-Z[\\\]^_`a-z{|}~]+$/.test(password),
-	);
+export const passwordSchema = asciiStringSchema()
+	.min(1)
+	.max(MAX_PASSWORD_LENGTH);
 
 export const MODIFIES_GAME = Symbol();
 
@@ -215,3 +214,51 @@ export const clientMessageSchema = z.object({
 });
 
 export type ClientMessage = z.infer<typeof clientMessageSchema>;
+
+export const ruleApprovedBodySchema = z.object({
+	snowflake: z.string(),
+	isApproved: z.boolean(),
+});
+
+export type RuleApprovedBody = z.infer<typeof ruleApprovedBodySchema>;
+
+export const customIncludesRuleSchema = z.object({
+	user: apiUserSchema,
+	snowflake: z.string(),
+	categoryName: z.string(),
+	picture0Path: z.string().nullable(),
+	picture1Path: z.string().nullable(),
+	description: z.string().nullable(),
+	optionsCode: z.string(),
+	isEnabled: z.boolean(),
+	isApproved: z.boolean(),
+});
+
+export const customIncludesRuleUploadSchema = z.object({
+	snowflake: z.string().optional(),
+	categoryName: asciiStringSchema().transform(str => {
+		const trimmed = str.trim();
+		if (trimmed.length === 0) throw Error('Category name cannot be empty');
+		return trimmed;
+	}),
+	picture0: z.number().nullable().optional(),
+	picture1: z.number().nullable().optional(),
+	description: asciiStringSchema()
+		.nullable()
+		.transform(str => {
+			if (str == null) return null;
+			const trimmed = str.trim();
+			return trimmed.length === 0 ? null : trimmed;
+		}),
+	optionsCode: asciiStringWithNewlineSchema().transform(str =>
+		normalizeOptionsCode(str),
+	),
+	isEnabled: z.boolean(),
+});
+
+export type CustomIncludesRule = z.infer<typeof customIncludesRuleSchema>;
+export type CustomIncludesRuleUpload = z.infer<
+	typeof customIncludesRuleUploadSchema
+>;
+
+export const BINARY_PAYLOAD_LIMIT = 56000000;

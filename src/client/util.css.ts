@@ -23,7 +23,7 @@ export const input = style({
 	gridTemplateColumns: '100%',
 	gridTemplateRows: '100%',
 	alignItems: 'center',
-	justifyItems: 'start',
+
 	position: 'relative',
 	backgroundColor: themeContract.colors.container,
 	color: themeContract.colors.text,
@@ -40,7 +40,16 @@ export const input = style({
 
 	height: '2.0rem',
 	width: '100%',
+	borderRadius: '0.25rem',
 });
+
+export const inlineInput = style([
+	input,
+	{
+		display: 'inline-grid',
+		width: 'unset',
+	},
+]);
 
 export const button = style({
 	display: 'grid',
@@ -50,7 +59,7 @@ export const button = style({
 	justifyItems: 'center',
 	paddingInline: '0.5rem',
 	boxSizing: 'border-box',
-	borderRadius: 0,
+	borderRadius: '0.25rem',
 	border: 'none',
 	cursor: 'pointer',
 	fontSize: '1.0rem',

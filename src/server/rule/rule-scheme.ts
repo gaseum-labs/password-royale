@@ -20,6 +20,9 @@ import * as tiesRules from './rules/ties-rules.js';
 import * as timeRules from './rules/time-rules.js';
 import * as wordRules from './rules/word-rules.js';
 import crypto from 'node:crypto';
+import { Database } from '../database/index.js';
+import { parseOptionsCode } from '../../shared/options.js';
+import { getPicturePath } from '../../shared/asset-path.js';
 
 const filterPartitionedRules = (
 	partitionState: Map<string, string>,
@@ -147,7 +150,11 @@ export const generateRuleScheme = (): RuleScheme => {
 		Object.values(wordRules),
 	);
 
-	const includesList = [...allIncludesRules, ...includesSpecRegistry];
+	const includesList = [
+		...allIncludesRules,
+		...includesSpecRegistry,
+		...collectCustomRules(),
+	];
 
 	const spots: Spot[] = [
 		'word',
@@ -207,4 +214,24 @@ export const generateRuleScheme = (): RuleScheme => {
 	insertIncludesAnother(scheme);
 
 	return scheme;
+};
+
+export const collectCustomRules = (): IncludesSpec[] => {
+	const rules = Database.getReadyIncludesRules();
+
+	return rules.map(rule => {
+		const pictureUrl: string[] = [];
+		if (rule.picture0Path != null)
+			pictureUrl.push(getPicturePath(rule.picture0Path));
+		if (rule.picture1Path != null)
+			pictureUrl.push(getPicturePath(rule.picture1Path));
+
+		return {
+			categoryName: rule.categoryName,
+			id: rule.snowflake,
+			words: parseOptionsCode(rule.optionsCode),
+			description: rule.description ?? undefined,
+			pictureUrl,
+		} satisfies IncludesSpec;
+	});
 };

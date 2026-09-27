@@ -116,3 +116,6 @@ expect(dupeNumber.validator(cp('34 kjiosad 34iojioa oo35_@'))).bad();
 expect(dupeNumber.validator(cp('34 kjiosad iojioa oo34_@'))).bad();
 expect(dupeNumber.validator(cp('34 kjiosad 34iojioa oo345_@'))).bad();
 expect(dupeNumber.validator(cp('34 kjiosad -34iojioa oo34_@'))).bad();
+
+const buffer = new Uint8Array(100).buffer;
+const b2 = new Uint8Array(buffer, 2, 3);

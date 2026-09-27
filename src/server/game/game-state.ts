@@ -13,9 +13,10 @@ import {
 	InternalPlayer,
 	InternalUser,
 } from './game-registry.js';
-import { notifyGame, RequestError } from './game-socket.js';
+import { notifyGame } from './game-socket.js';
 import { Database } from '../database/index.js';
 import { generateRuleScheme } from '../rule/rule-scheme.js';
+import { RequestError } from '../error.js';
 
 export const INITIAL_TIME = 1 * 60 * 1000;
 export const TIME_PER_RULE = 5 * 1000;

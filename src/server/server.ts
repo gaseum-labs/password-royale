@@ -1,5 +1,5 @@
 import '../shared/util.js';
-import express, { ErrorRequestHandler, Router } from 'express';
+import express, { ErrorRequestHandler } from 'express';
 import cookieParser from 'cookie-parser';
 import fs from 'node:fs/promises';
 import { app, httpsServer, httpServer } from './http.js';
@@ -11,6 +11,7 @@ import {
 import { createServer } from 'vite';
 import { authRouter } from './auth/auth-router.js';
 import { apiRouter } from './api-router.js';
+import { RequestError } from './error.js';
 
 app.enable('trust-proxy');
 
@@ -82,8 +83,13 @@ if (NODE_ENV === 'development') {
 }
 
 const errorHandler: ErrorRequestHandler = (err, req, res, next) => {
-	const message = err instanceof Error ? err.message : 'Unknown error';
-	res.status(500).json({ message });
+	console.error(err);
+	if (err instanceof RequestError) {
+		res.status(err.code).json({ message: err.message });
+	} else {
+		const message = err instanceof Error ? err.message : 'Unknown error';
+		res.status(500).json({ message });
+	}
 };
 
 app.use(errorHandler);
@@ -92,3 +98,5 @@ httpServer.listen(PORT);
 httpsServer.listen(443);
 
 console.log(`app listening on ${PORT}, https on 443`);
+
+const f = 3;

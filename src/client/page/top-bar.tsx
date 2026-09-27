@@ -4,7 +4,7 @@ import * as style from './top-bar.css.js';
 import { sendSocketMessage } from '../client-socket.js';
 import { mainActions, useMainStore } from '../store.js';
 import clsx from 'clsx';
-import { getAvatarPath } from '../avatar.js';
+import { getAvatarPath } from '../../shared/asset-path.js';
 import { navigate } from '../nav.js';
 
 export type TopBarProps = {
@@ -58,7 +58,10 @@ export const TopBar = ({ user, gameCode, className }: TopBarProps) => {
 				<a href="/auth/logout" className={style.textButton}>
 					Log out
 				</a>
-				<img src={getAvatarPath(user)} className={style.avatar} />
+				<img
+					src={getAvatarPath(user.snowflake)}
+					className={style.avatar}
+				/>
 			</div>
 			{errorMessage != null && (
 				<div className={style.errorBanner}>
