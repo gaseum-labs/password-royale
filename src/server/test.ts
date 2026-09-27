@@ -68,6 +68,7 @@ const testGame: InternalGame = {
 	ruleScheme: [],
 	timestamp: 0,
 	winnerSnowflake: null,
+	connections: new Set(),
 };
 testPlayer.game = testGame;
 
