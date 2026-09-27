@@ -199,3 +199,11 @@ export const approvedText = style({
 export const clickable = style({
 	cursor: 'pointer',
 });
+
+export const backButton = style([
+	general.button,
+	{
+		justifySelf: 'end',
+		width: 'max-content',
+	},
+]);

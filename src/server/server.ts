@@ -3,7 +3,7 @@ import express, { ErrorRequestHandler } from 'express';
 import cookieParser from 'cookie-parser';
 import fs from 'node:fs/promises';
 import { app, httpsServer, httpServer } from './http.js';
-import { COOKIE_NAME, NODE_ENV, PORT } from './variables.js';
+import { COOKIE_NAME, NODE_ENV, PORT, SSL_PORT } from './variables.js';
 import {
 	encodeAuthCookieValue,
 	verifyAuthCookieValue,
@@ -95,8 +95,8 @@ const errorHandler: ErrorRequestHandler = (err, req, res, next) => {
 app.use(errorHandler);
 
 httpServer.listen(PORT);
-httpsServer.listen(443);
+httpsServer?.listen(SSL_PORT);
 
-console.log(`app listening on ${PORT}, https on 443`);
-
-const f = 3;
+console.log(
+	`app listening on ${PORT}${httpsServer != null ? ` | https on ${SSL_PORT}` : ''}`,
+);

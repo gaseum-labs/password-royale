@@ -17,6 +17,7 @@ import clsx from 'clsx';
 import * as themeStyle from '../theme.css.js';
 import { encodeBinary } from '../../shared/protocol.js';
 import { parseOptionsCode } from '../../shared/options.js';
+import { navigate } from '../nav.js';
 
 type UploadedFile = {
 	file: File;
@@ -130,8 +131,15 @@ export const ListView = ({
 		});
 	};
 
+	const onBack = () => {
+		navigate('/');
+	};
+
 	return (
 		<div className={style.listContent}>
+			<button className={style.backButton} onClick={onBack}>
+				Back
+			</button>
 			{rules == null && <span>Loading...</span>}
 			{rules?.map(rule => (
 				<div

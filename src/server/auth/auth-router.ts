@@ -5,9 +5,11 @@ import {
 	DISCORD_CDN_URL,
 	DISCORD_CLIENT_ID,
 	DISCORD_CLIENT_SECRET,
+	INSECURE_MODE,
 } from '../variables.js';
 import crypto from 'node:crypto';
 import { newRandomSnowflake } from '../snowflake.js';
+import { getUserInfo } from './auth-util.js';
 
 const router = Router();
 
@@ -98,10 +100,9 @@ router.get('/logout', (req, res) => {
 });
 
 router.get('/spoof', (req, res) => {
-	const { userSnowflake } = req.session;
-	if (userSnowflake == null) return res.sendStatus(401);
-	const user = Database.getUser(userSnowflake);
-	if (!user?.isAdmin) return res.sendStatus(403);
+	if (!INSECURE_MODE) {
+		getUserInfo(req, { needsAdmin: true });
+	}
 
 	req.session = { userSnowflake: newRandomSnowflake() };
 	req.isCookieUpdated = true;

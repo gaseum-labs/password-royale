@@ -34,9 +34,9 @@ export type InternalGame = Omit<
 	host: InternalPlayer;
 	ruleScheme: RuleScheme;
 	bannedUserSnowflakes: Set<string>;
+	connections: Set<Connection>;
 };
 
 export const userMap = new Map<string, InternalUser>();
-
 export const games: InternalGame[] = [];
 export const codeToGame = new Map<string, InternalGame>();

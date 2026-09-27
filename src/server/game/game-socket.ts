@@ -86,20 +86,38 @@ const removeConnection = (user: InternalUser, connection: Connection) => {
 	cleanupUser(user);
 };
 
+const addConnectionToGame = (connection: Connection, game: InternalGame) => {
+	const oldGame = connection.game;
+	if (oldGame != null) {
+		oldGame.connections.delete(connection);
+	}
+	connection.game = game;
+	game.connections.add(connection);
+};
+
+const removeConnectionFromGame = (connection: Connection) => {
+	const oldGame = connection.game;
+	if (oldGame != null) {
+		oldGame.connections.delete(connection);
+	}
+	connection.game = null;
+};
+
+const removeAllUserConnectionsFromGame = (
+	user: InternalUser,
+	game: InternalGame,
+) => {
+	for (const connection of user.connections) {
+		removeConnectionFromGame(connection);
+		dirtyConnections.add(connection);
+	}
+};
+
 const sendMessage = (webSocket: WebSocket, message: ServerMessage) => {
 	webSocket.send(JSON.stringify(message));
 };
 
 const dirtyConnections = new Set<Connection>();
-
-const removeConnectionGame = (user: InternalUser, game: InternalGame) => {
-	for (const connection of user.connections) {
-		if (connection.game === game) {
-			connection.game = null;
-			dirtyConnections.add(connection);
-		}
-	}
-};
 
 export const onConnection = (
 	webSocket: WebSocket,
@@ -232,14 +250,8 @@ export const notifyGame = ({
 
 	const gameSet = new Set(games?.filter(game => game != null) ?? []);
 	for (const game of gameSet) {
-		if (game == null) continue;
-		for (const player of game.players) {
-			const user = getUser(player.user.snowflake);
-			for (const connection of user.connections) {
-				if (connection.game === game) {
-					connections.add(connection);
-				}
-			}
+		for (const connection of game.connections) {
+			connections.add(connection);
 		}
 	}
 
@@ -304,9 +316,11 @@ registerMessageHandlerFunc(
 		}
 		canJoinGame(game, user);
 
-		joinGame(game, user);
+		if (game.phase === 'pregame') {
+			joinGame(game, user);
+		}
 
-		connection.game = game;
+		addConnectionToGame(connection, game);
 	},
 );
 
@@ -314,12 +328,14 @@ registerMessageHandlerFunc(leaveMessage, ({ user, connection }) => {
 	const { player } = getContext(user, connection);
 
 	leaveGame(player);
+
+	removeConnectionFromGame(connection);
 });
 
 registerMessageHandlerFunc(establishMessage, ({ user, connection }) => {
 	const game = createGame(user);
 
-	connection.game = game;
+	addConnectionToGame(connection, game);
 });
 
 registerMessageHandlerFunc(
@@ -357,7 +373,7 @@ registerMessageHandlerFunc(
 
 		bootPlayer(game, bannedPlayer, true);
 
-		removeConnectionGame(bannedPlayer.user, game);
+		removeAllUserConnectionsFromGame(bannedPlayer.user, game);
 	},
 );
 
@@ -377,7 +393,7 @@ registerMessageHandlerFunc(
 
 		bootPlayer(game, kickedPlayer, false);
 
-		removeConnectionGame(kickedPlayer.user, game);
+		removeAllUserConnectionsFromGame(kickedPlayer.user, game);
 	},
 );
 

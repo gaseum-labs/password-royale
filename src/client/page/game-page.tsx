@@ -1,7 +1,6 @@
 import React, { useEffect } from 'react';
 import {
 	APIGame,
-	MAX_PASSWORD_LENGTH,
 	UNKNOWN_AVATAR_PATH,
 	APIUser,
 	kickMessage,
@@ -253,6 +252,10 @@ const FoundGame = ({
 	}, [roundEndTime]);
 	const timeString = timeLeft == null ? undefined : getTimeString(timeLeft);
 
+	const isPlayer =
+		game?.players.some(player => player.snowflake === user.snowflake) ??
+		false;
+
 	return (
 		<div className={clsx(style.gamePage, themeStyle.darkTheme)}>
 			<TopBar user={user} gameCode={game?.code} />
@@ -410,47 +413,49 @@ const FoundGame = ({
 					</div>
 				</div>
 			</div>
-			<div className={style.bottomBar}>
-				<textarea
-					disabled={game == null}
-					className={style.passwordInput}
-					value={password}
-					onChange={onChangePassword}
-					placeholder="Enter password..."
-					onKeyDown={onPressEnter}
-					spellCheck={false}
-				/>
-				<span className={style.passwordLength}>
-					{password.length ?? 0}
-				</span>
-				<button
-					disabled={!canSubmit}
-					className={clsx(
-						generalStyle.button,
-						canSubmit && generalStyle.suggestButton,
-					)}
-					onClick={onClickSubmit}
-				>
-					Submit
-				</button>
-				{game?.hostSnowflake === user.snowflake && (
+			{isPlayer && (
+				<div className={style.bottomBar}>
+					<textarea
+						disabled={game == null}
+						className={style.passwordInput}
+						value={password}
+						onChange={onChangePassword}
+						placeholder="Enter password..."
+						onKeyDown={onPressEnter}
+						spellCheck={false}
+					/>
+					<span className={style.passwordLength}>
+						{password.length ?? 0}
+					</span>
 					<button
-						disabled={!canAdvance && !canNewGame}
+						disabled={!canSubmit}
 						className={clsx(
 							generalStyle.button,
-							(canAdvance || canNewGame) &&
-								generalStyle.suggestButton,
+							canSubmit && generalStyle.suggestButton,
 						)}
-						onClick={canNewGame ? onClickNewGame : onClickNext}
+						onClick={onClickSubmit}
 					>
-						{canNewGame
-							? 'New Game'
-							: game.phase === 'pregame'
-								? 'Start'
-								: 'Next'}
+						Submit
 					</button>
-				)}
-			</div>
+					{game?.hostSnowflake === user.snowflake && (
+						<button
+							disabled={!canAdvance && !canNewGame}
+							className={clsx(
+								generalStyle.button,
+								(canAdvance || canNewGame) &&
+									generalStyle.suggestButton,
+							)}
+							onClick={canNewGame ? onClickNewGame : onClickNext}
+						>
+							{canNewGame
+								? 'New Game'
+								: game.phase === 'pregame'
+									? 'Start'
+									: 'Next'}
+						</button>
+					)}
+				</div>
+			)}
 		</div>
 	);
 };

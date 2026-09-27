@@ -1,4 +1,5 @@
 export const PORT = Number(process.env.PORT);
+export const SSL_PORT = Number(process.env.SSL_PORT);
 export const DISCORD_CLIENT_ID = process.env.DISCORD_CLIENT_ID as string;
 export const DISCORD_CLIENT_SECRET = process.env
 	.DISCORD_CLIENT_SECRET as string;
@@ -7,8 +8,13 @@ export const DISCORD_CDN_URL = process.env.DISCORD_CDN_URL as string;
 export const COOKIE_NAME = process.env.COOKIE_NAME as string;
 export const COOKIE_SECRET = process.env.COOKIE_SECRET as string;
 export const NODE_ENV = process.env.NODE_ENV as string;
-export const HTTPS_CERT_FILE_PATH = process.env.HTTPS_CERT_FILE_PATH as string;
-export const HTTPS_KEY_FILE_PATH = process.env.HTTPS_KEY_FILE_PATH as string;
+export const HTTPS_CERT_FILE_PATH = process.env.HTTPS_CERT_FILE_PATH as
+	| string
+	| undefined;
+export const HTTPS_KEY_FILE_PATH = process.env.HTTPS_KEY_FILE_PATH as
+	| string
+	| undefined;
+export const INSECURE_MODE = process.env.INSECURE_MODE === 'true';
 
 console.log({
 	PORT,
@@ -21,4 +27,5 @@ console.log({
 	NODE_ENV,
 	HTTPS_CERT_FILE_PATH,
 	HTTPS_KEY_FILE_PATH,
+	INSECURE_MODE,
 });

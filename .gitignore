@@ -4,3 +4,4 @@
 /.vscode
 /db
 /script
+/dev.env

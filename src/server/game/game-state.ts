@@ -212,6 +212,7 @@ export const createGame = (host: InternalUser): InternalGame => {
 		bannedUserSnowflakes: new Set(),
 		timestamp: Date.now(),
 		ruleScheme: generateRuleScheme(),
+		connections: new Set(),
 	};
 	++numGames;
 	Database.incrementGameCount();
@@ -417,8 +418,6 @@ export const canAdvance = (
 export const canJoinGame = (game: InternalGame, user: InternalUser): void => {
 	if (game.bannedUserSnowflakes.has(user.snowflake))
 		throw new RequestError('You are banned');
-	if (game.phase !== 'pregame' && getGamePlayer(game, user.snowflake) == null)
-		throw new RequestError("It's too late to join");
 };
 
 export const canBoot = (game: InternalGame, player: InternalPlayer): void => {
