@@ -22,7 +22,7 @@ export const httpsServer =
 const httpWebSocketServer = new WebSocketServer({ server: httpServer });
 httpWebSocketServer.on('connection', onConnection);
 
-if (httpServer != null) {
+if (httpsServer != null) {
 	const httpsWebSocketServer = new WebSocketServer({
 		server: httpsServer,
 	});
